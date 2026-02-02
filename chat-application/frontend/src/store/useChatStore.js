@@ -56,4 +56,29 @@ export const useChatStore = create((set,get)=>({
             set({isMessagesLoading:false});
         }
     },
+
+    sendMessage: async (data)=>{
+        const {selectedUser,messages} = get();
+        const {authUser} = useAuthStore.getState();
+        const tempId = `temp-${Date.now()}`;
+        const optimisticMessage = {
+            _id: tempId,
+            senderId: authUser._id,
+            receiverId: selectedUser._id,
+            text: data.text,
+            image: data.image,
+            createdAt: new Date().toISOString(),
+            isOptimistic:true,
+        };
+
+        set({messages:[...messages,optimisticMessage]});
+        
+        try {
+            const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`,data);
+            set({messages:messages.concat(res.data)});
+        } catch (error) {
+            set({messages:messages});
+            toast.error(error.response?.data?.message || "Failed to send message");
+        }
+    },
 }));
