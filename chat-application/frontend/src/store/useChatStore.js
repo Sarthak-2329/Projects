@@ -1,6 +1,7 @@
 import {create} from 'zustand';
 import { axiosInstance } from '../lib/axios';
 import toast from 'react-hot-toast';
+import { useAuthStore } from './useAuthStore';
 
 export const useChatStore = create((set,get)=>({
     allContacts:[],
@@ -10,7 +11,7 @@ export const useChatStore = create((set,get)=>({
     selectedUser:null,
     isUsersLoading:false,
     isMessagesLoading:false,
-    isSoundEnabled:localStorage.getItem("isSoundEnabled")===true,
+    isSoundEnabled:localStorage.getItem("isSoundEnabled")==="true",
 
     toggleSound: ()=>{
         localStorage.setItem("isSoundEnabled",!get().isSoundEnabled);
@@ -86,6 +87,7 @@ export const useChatStore = create((set,get)=>({
         const {selectedUser,isSoundEnabled} = get();
         if(!selectedUser)return;
         const socket = useAuthStore.getState().socket;
+        if(!socket)return;
         socket.on("newMessage",(newMessage)=>{
             const isMessageSentFromSelectedUser = newMessage.senderId===selectedUser._id;
             if(!isMessageSentFromSelectedUser)return;
@@ -102,6 +104,7 @@ export const useChatStore = create((set,get)=>({
 
     unsubscribeFromMessages: ()=>{
         const socket = useAuthStore.getState().socket;
+        if(!socket)return;
         socket.off("newMessage");
     },
 }));
