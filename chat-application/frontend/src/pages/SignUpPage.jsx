@@ -8,7 +8,7 @@ import {
   UserIcon,
   LoaderIcon,
 } from "lucide-react";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 
 function SignUpPage() {
   const [formData, setFormData] = useState({

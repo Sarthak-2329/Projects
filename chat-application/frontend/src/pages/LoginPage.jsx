@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useAuthStore } from "../store/useAuthStore";
 import BorderAnimatedContainer from "../components/BorderAnimatedContainer";
 import { MessageCircleIcon, MailIcon, LoaderIcon, LockIcon } from "lucide-react";
-import { Link } from "react-router";
+import { Link } from "react-router-dom";
 
 function LoginPage() {
   const [formData, setFormData] = useState({ email: "", password: "" });
