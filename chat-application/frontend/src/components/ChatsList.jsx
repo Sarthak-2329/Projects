@@ -5,36 +5,52 @@ import NoChatsFound from './NoChatsFound';
 import {useAuthStore} from '../store/useAuthStore';
 
 function ChatsList() {
-  const {getMyChatPartners,chats,isUsersLoading,setSelectedUser} = useChatStore();
-  const {onlineUsers} = useAuthStore();
+  const { getMyChatPartners, chats, isUsersLoading, setSelectedUser } = useChatStore();
+  const { onlineUsers } = useAuthStore();
 
+  useEffect(() => {
+    getMyChatPartners();
+  }, [getMyChatPartners]);
 
-  useEffect(()=>{
-    getMyChatPartners()
-  },[getMyChatPartners]);
-
-  if(isUsersLoading) return <UsersLoadingSkeleton/>;
-  if(chats.length===0) return <NoChatsFound/>;
+  if (isUsersLoading) return <UsersLoadingSkeleton />;
+  if (chats.length === 0) return <NoChatsFound />;
 
   return (
     <>
-    {chats.map(chat=>(
-      <div key={chat._id}
-        className='bg-cyan-500/10 p-4 rounded-lg cursor-pointer hover:bg-cyan-500/20 transition-colors'
-        onClick={()=>setSelectedUser(chat)}
-        >
-          <div className='flex items-center gap-3'>
-            <div className={`avatar ${onlineUsers.includes(chat._id) ? 'online' : 'offline'}`}>
-              <div className='size-12 rounded-full'>
-                <img src={chat.profilePic || "/avatar.png"} alt={chat.fullName} />
+      {chats.map((chat) => {
+        const isOnline = onlineUsers.includes(chat._id);
+        return (
+          <button
+            key={chat._id}
+            type="button"
+            onClick={() => setSelectedUser(chat)}
+            className="w-full text-left group bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800/80 hover:border-cyan-500/60 rounded-xl px-3.5 py-3 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className={`avatar ${isOnline ? "online" : "offline"}`}>
+                <div className="size-11 rounded-full ring-1 ring-slate-700/80 ring-offset-2 ring-offset-slate-900 overflow-hidden">
+                  <img src={chat.profilePic || "/avatar.png"} alt={chat.fullName} />
+                </div>
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <h4 className="text-sm font-medium text-slate-100 truncate">
+                    {chat.fullName}
+                  </h4>
+                  <span className="text-[10px] uppercase tracking-wide text-slate-500 group-hover:text-cyan-300">
+                    {isOnline ? "Online" : "Offline"}
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-slate-500 truncate">
+                  Tap to open your conversation
+                </p>
               </div>
             </div>
-            <h4 className='text-slate-200 font-medium truncate'>{chat.fullName}</h4>
-          </div>
-        </div>
-    ))}
+          </button>
+        );
+      })}
     </>
   );
-};
+}
 
 export default ChatsList;

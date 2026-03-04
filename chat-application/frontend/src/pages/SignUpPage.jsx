@@ -1,148 +1,91 @@
-import { useState } from "react";
-import { useAuthStore } from "../store/useAuthStore";
-import BorderAnimatedContainer from "../components/BorderAnimatedContainer";
-import {
-  MessageCircleIcon,
-  LockIcon,
-  MailIcon,
-  UserIcon,
-  LoaderIcon,
-} from "lucide-react";
+import React, { useState } from "react";
+import { Mail, Lock, User } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useAuthStore } from "../store/useAuthStore";
+import AuthBackground from "../components/AuthBackground";
 
-function SignUpPage() {
-  const [formData, setFormData] = useState({
-    fullName: "",
-    email: "",
-    password: "",
-  });
+function SignupPage() {
+
   const { signup, isSigningUp } = useAuthStore();
 
-  const handleSubmit = (e) => {
+  const [formData,setFormData] = useState({
+    fullName:"",
+    email:"",
+    password:"",
+  });
+
+  const handleSubmit = (e)=>{
     e.preventDefault();
     signup(formData);
   };
 
   return (
-    <div className="w-full flex items-center justify-center p-4 bg-slate-900">
-      <div className="relative w-full max-w-6xl md:h-[800px] h-[650px]">
-        <BorderAnimatedContainer>
-          <div className="w-full flex flex-col md:flex-row">
-            {/* FORM CLOUMN - LEFT SIDE */}
-            <div className="md:w-1/2 p-8 flex items-center justify-center md:border-r border-slate-600/30">
-              <div className="w-full max-w-md">
-                {/* HEADING TEXT */}
-                <div className="text-center mb-8">
-                  <MessageCircleIcon className="w-12 h-12 mx-auto text-slate-400 mb-4" />
-                  <h2 className="text-2xl font-bold text-slate-200 mb-2">
-                    Create Account
-                  </h2>
-                  <p className="text-slate-400">Sign up for a new account</p>
-                </div>
+    <AuthBackground>
 
-                {/* FORM */}
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  {/* FULL NAME */}
-                  <div>
-                    <label className="auth-input-label">Full Name</label>
-                    <div className="relative">
-                      <UserIcon className="auth-input-icon" />
+      <div className="relative w-[420px] backdrop-blur-xl bg-white/5 border border-white/20 rounded-3xl p-10 shadow-2xl">
 
-                      <input
-                        type="text"
-                        value={formData.fullName}
-                        onChange={(e) =>
-                          setFormData({ ...formData, fullName: e.target.value })
-                        }
-                        className="input"
-                        placeholder="Sarthak Surale"
-                      />
-                    </div>
-                  </div>
+        <h1 className="text-3xl font-semibold text-center text-white mb-8">
+          Create Account
+        </h1>
 
-                  {/* EMAIL INPUT */}
-                  <div>
-                    <label className="auth-input-label">Email</label>
-                    <div className="relative">
-                      <MailIcon className="auth-input-icon" />
+        <form onSubmit={handleSubmit} className="space-y-5">
 
-                      <input
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) =>
-                          setFormData({ ...formData, email: e.target.value })
-                        }
-                        className="input"
-                        placeholder="sarthaksurale@gmail.com"
-                      />
-                    </div>
-                  </div>
+          <div className="relative">
+            <User className="absolute left-3 top-3.5 text-gray-400 size-5"/>
 
-                  {/* PASSWORD INPUT */}
-                  <div>
-                    <label className="auth-input-label">Password</label>
-                    <div className="relative">
-                      <LockIcon className="auth-input-icon" />
-
-                      <input
-                        type="password"
-                        value={formData.password}
-                        onChange={(e) =>
-                          setFormData({ ...formData, password: e.target.value })
-                        }
-                        className="input"
-                        placeholder="Enter your password"
-                      />
-                    </div>
-                  </div>
-
-                  {/* SUBMIT BUTTON */}
-                  <button
-                    className="auth-btn"
-                    type="submit"
-                    disabled={isSigningUp}
-                  >
-                    {isSigningUp ? (
-                      <LoaderIcon className="w-full h-5 animate-spin text-center" />
-                    ) : (
-                      "Create Account"
-                    )}
-                  </button>
-                </form>
-
-                <div className="mt-6 text-center">
-                  <Link to="/login" className="auth-link">
-                    Already have an account? Login
-                  </Link>
-                </div>
-              </div>
-            </div>
-
-            {/* FORM ILLUSTRATION - RIGHT SIDE */}
-            <div className="hidden md:w-1/2 md:flex items-center justify-center p-6 bg-gradient-to-bl from-slate-800/20 to-transparent">
-              <div>
-                <img
-                  src="/signup.png"
-                  alt="People using mobile devices"
-                  className="w-full h-auto object-contain"
-                />
-                <div className="mt-6 text-center">
-                  <h3 className="text-xl font-medium text-cyan-400">
-                    Start Your Journey Today
-                  </h3>
-
-                  <div className="mt-4 flex justify-center gap-4">
-                    <span className="auth-badge">Free</span>
-                    <span className="auth-badge">Easy Setup</span>
-                    <span className="auth-badge">Private</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <input
+              type="text"
+              placeholder="Full name"
+              value={formData.fullName}
+              onChange={(e)=>setFormData({...formData,fullName:e.target.value})}
+              className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            />
           </div>
-        </BorderAnimatedContainer>
+
+          <div className="relative">
+            <Mail className="absolute left-3 top-3.5 text-gray-400 size-5"/>
+
+            <input
+              type="email"
+              placeholder="Email"
+              value={formData.email}
+              onChange={(e)=>setFormData({...formData,email:e.target.value})}
+              className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            />
+          </div>
+
+          <div className="relative">
+            <Lock className="absolute left-3 top-3.5 text-gray-400 size-5"/>
+
+            <input
+              type="password"
+              placeholder="Password"
+              value={formData.password}
+              onChange={(e)=>setFormData({...formData,password:e.target.value})}
+              className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+            />
+          </div>
+
+          <button
+            disabled={isSigningUp}
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:opacity-90 transition shadow-lg"
+          >
+            {isSigningUp ? "Creating..." : "Create Account"}
+          </button>
+
+          <p className="text-center text-gray-400 text-sm">
+            Already have an account?
+            <Link to="/login" className="text-cyan-400 ml-1 hover:underline">
+              Login
+            </Link>
+          </p>
+
+        </form>
+
       </div>
-    </div>
+
+    </AuthBackground>
   );
 }
-export default SignUpPage;
+
+export default SignupPage;

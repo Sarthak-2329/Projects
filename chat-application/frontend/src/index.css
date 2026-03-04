@@ -8,6 +8,33 @@
   syntax: "<angle>";
 }
 
+.body-gradient {
+  @apply min-h-screen bg-slate-950 text-slate-100;
+  background-image:
+    radial-gradient(circle at top left, rgba(94, 234, 212, 0.16), transparent 55%),
+    radial-gradient(circle at bottom right, rgba(129, 140, 248, 0.20), transparent 60%),
+    radial-gradient(circle at center, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 1));
+}
+
+.glass-card {
+  @apply bg-slate-900/75 border border-slate-700/70 shadow-[0_24px_60px_rgba(15,23,42,0.95)] backdrop-blur-2xl;
+}
+
+.subtle-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.7) transparent;
+}
+.subtle-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.subtle-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.subtle-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.6);
+  border-radius: 999px;
+}
+
 .input {
   @apply w-full bg-slate-800/50 border border-slate-700 rounded-lg py-2 pl-10 pr-4 text-slate-200 placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-transparent;
 }
@@ -32,4 +59,12 @@
 .auth-link {
   @apply px-4 py-2 inline-block bg-cyan-500/10 rounded-lg text-cyan-400
   hover:text-cyan-500 text-sm transition-colors;
+}
+
+.chat {
+  width: 100%;
+}
+
+.chat-bubble {
+  max-width: 70%;
 }
