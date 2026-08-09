@@ -7,6 +7,7 @@
   },
   "scripts": {
     "build": "npm install --prefix backend && npm install --prefix frontend && npm run build --prefix frontend",
+    "build:cpp": "g++ -std=c++17 cpp_core/src/main.cpp cpp_core/src/socket_engine.cpp cpp_core/src/room_manager.cpp -Icpp_core/include -lws2_32 -o cpp_core/cpp_chat_core",
     "start": "npm run start --prefix backend"
   },
   "keywords": [],
