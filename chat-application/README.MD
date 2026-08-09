@@ -1,163 +1,71 @@
-<h1 align="center">⚡ Production Hybrid AI Chat Platform ⚡</h1>
+<h1 align="center">⚡ Scalable Hybrid Chat Architecture ⚡</h1>
 <p align="center">
-  <b>High-Concurrency C++ Core Engine • Node.js Microservices • Socket.io Redis Cluster • RAG Document AI Streaming</b>
+  <b>High-Concurrency C++ Core Engine • Node.js Microservices • Socket.io Redis Cluster</b>
 </p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/C%2B%2B17-00599C?style=for-the-badge&logo=c%2B%2B&logoColor=white" alt="C++" />
+  <img src="https://img.shields.io/badge/Node.js-43853D?style=for-the-badge&logo=node.js&logoColor=white" alt="Node.js" />
+  <img src="https://img.shields.io/badge/Socket.io-010101?style=for-the-badge&logo=socket.io&logoColor=white" alt="Socket.io" />
+  <img src="https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis" />
+  <img src="https://img.shields.io/badge/React_19-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React" />
+</p>
+
+---
+
+## 📖 Overview
+
+This repository houses a production-grade, real-time chat platform that bridges the gap between low-level systems programming and modern web microservices. 
+
+Instead of relying solely on a standard Node.js backend, this project offloads heavy, concurrent TCP network I/O to a custom-built **C++ Engine** utilizing multiplexing and thread pools. The C++ core communicates with a horizontally scaled **Node.js Gateway** via Redis, ensuring high throughput, exact message framing, and seamless delivery status lifecycles.
 
 ---
 
 ## 🌟 Key Architecture & Technical Highlights
 
 ### ⚡ 1. Low-Level C++ Performance Engine (`/cpp_core`)
-- **`epoll` I/O Multiplexing**: Linux non-blocking event-driven socket server (with cross-platform Winsock `WSAPoll` fallback for Windows development).
-- **Fixed-Size Thread Pool**: Multi-threaded worker queue (`std::thread`, `std::mutex`, `std::condition_variable`) eliminating task allocation overhead under high connection surges.
-- **Thread-Safe State & Heartbeats**: Mutex-protected room maps (`std::lock_guard`) with a periodic **15s Heartbeat Ping / 30s Timeout** sweep to purge zombie sockets.
-- **Custom TCP Packet Framing**: 4-byte big-endian header length prefix protocol parser resolving sticky bytes and partial buffer reads.
-- **Signal Trapping & Memory Safety**: Handles `SIGINT` / `SIGTERM` to close file descriptors cleanly and prevent resource leaks.
+- **Event-Driven I/O Multiplexing**: Utilizes non-blocking edge-triggered `epoll` (Linux) and `select`/`WSAPoll` (Windows) to solve the C10K problem.
+- **Fixed-Size Thread Pool**: Task queue driven by `std::thread`, `std::mutex`, and `std::condition_variable`, eliminating per-connection stack allocation overhead.
+- **Custom TCP Packet Framing**: Implements a strict 4-byte big-endian header length prefix protocol. Thread-safe buffer mutations prevent TCP sticky bytes, partial reads, and data corruption.
+- **Memory Safety & Heartbeats**: Includes a 15s ping / 30s timeout sweep to purge dead connections and handles `SIGINT`/`SIGTERM` to gracefully release file descriptors.
 
-### 🔄 2. Real-Time Socket Layer & Delivery Receipts (`/backend`)
-- **Redis Pub/Sub Adapter**: `@socket.io/redis-adapter` and `ioredis` integration enabling multi-instance Node.js process clustering.
-- **Message ACK Lifecycle**: Database-backed status tracking (`sent` ➔ `delivered` ➔ `read`) with `deliveredAt` and `readAt` timestamps.
-- **Cursor-Based Pagination**: Compound MongoDB indexing `{ senderId: 1, receiverId: 1, createdAt: -1 }` for high-performance conversation timeline reads.
+### 🔄 2. Node.js & Redis Socket Layer (`/backend`)
+- **Horizontal Scalability**: Uses `@socket.io/redis-adapter` and `ioredis` to synchronize state and broadcast events across multiple Node.js instances.
+- **Strict Delivery Lifecycle**: Database-backed Message ACKs preventing state regressions (`sent` ➔ `delivered` ➔ `read`).
+- **High-Performance Pagination**: Implements cursor-based infinite scrolling, powered by a compound MongoDB index `{ senderId: 1, receiverId: 1, createdAt: -1 }`.
 
-### 🤖 3. AI Agent & RAG Document Streaming (`/backend/src/ai`)
-- **RAG Document Engine**: Parses document text, chunks content into overlapping segments (500 chars / 100 overlap), and stores vector representations.
-- **Similarity Search**: Cosine Similarity nearest-neighbor search for retrieving contextual prompt grounding.
-- **Real-Time Token Streaming**: Stream AI response tokens directly to chat clients over WebSockets (`aiToken` ➔ `aiDone`).
-
-### 🛡️ 4. Full-Stack Features & Security
-- 🔐 **Custom JWT Authentication** (HttpOnly cookie validation & socket auth middleware)
-- 🟢 **Presence Indicators & Sound Alerts** (Online/offline user tracking & customizable audio notifications)
-- 📨 **Welcome Emails** powered by Resend
-- 🗂️ **Cloudinary Media Uploads** for high-resolution images
-- 🚦 **Arcjet API Rate-Limiting & Security**
-- 🎨 **React 19, Zustand, Tailwind CSS & DaisyUI**
+### 🛡️ 3. Frontend & Security (`/frontend`)
+- **Optimistic UI Updates**: Zustand functional state updates prevent stale closures and dropped socket events during asynchronous API calls.
+- **Security**: Custom JWT Auth (HttpOnly cookies), Arcjet API rate-limiting, and secure routing.
+- **Tech Stack**: React 19, Tailwind CSS, DaisyUI, Cloudinary (Media Uploads).
 
 ---
 
 ## 🏗 System Architecture Diagram
 
-```
+```text
                               +---------------------------------------+
                               |            React Frontend             |
                               +---------------------------------------+
-                                           |           ^
-                           WebSockets (Socket.io)  REST & File Uploads
-                                           v           |
+                                           |            ^
+                       WebSockets (Socket.io)  REST & File Uploads
+                                           v            |
                               +---------------------------------------+
                               |         Node.js Express Server        |
-                              |        (Auth, DB, Socket.io)          |
+                              |         (Auth, DB, Socket.io)         |
                               +---------------------------------------+
-                                   |                     |          |
-                    Redis Adapter  |                     |          |  AI RAG API & Stream
-                    (Pub/Sub)      v                     v          v
-                         +-------------------+  +--------------+  +--------------------+
-                         | Redis Broker      |  | MongoDB      |  | AI Vector Store    |
-                         | (Cross-node sync) |  | (ACK Status) |  | (PDF RAG Search)   |
-                         +-------------------+  +--------------+  +--------------------+
+                                   |                    |
+                     Redis Adapter |                    |
+                     (Pub/Sub)     v                    v
+                         +-------------------+  +--------------+
+                         | Redis Broker      |  | MongoDB      |
+                         | (Cross-node sync) |  | (ACK Status) |
+                         +-------------------+  +--------------+
                                    ^
                                    | (TCP Custom Binary Framing: 4-byte Prefix)
                                    v
                               +---------------------------------------+
                               |       C++ High-Performance Engine     |
-                              | (epoll Multiplexing, Thread Pool,     |
+                              | (Multiplexing, Thread Pool,           |
                               |  Thread-safe Room Maps, Heartbeats)   |
                               +---------------------------------------+
-```
-
----
-
-## 🧪 Environment Setup (`.env`)
-
-Create a `.env` file in the `/backend` directory:
-
-```env
-PORT=3000
-MONGO_URI=your_mongodb_connection_string
-
-NODE_ENV=development
-JWT_SECRET=your_jwt_secret_key
-
-CLIENT_URL=http://localhost:5173
-
-# Optional: Redis Cluster URL for horizontal Socket.io scaling
-REDIS_URL=redis://localhost:6379
-
-# Email Service
-RESEND_API_KEY=your_resend_api_key
-EMAIL_FROM=your_verified_email@domain.com
-EMAIL_FROM_NAME=YourAppName
-
-# Cloudinary Setup
-CLOUDINARY_CLOUD_NAME=your_cloud_name
-CLOUDINARY_API_KEY=your_api_key
-CLOUDINARY_API_SECRET=your_api_secret
-
-# Security & Rate Limiting
-ARCJET_KEY=your_arcjet_key
-ARCJET_ENV=development
-```
-
----
-
-## 🚀 Getting Started
-
-### 1. Run the C++ Core Engine
-
-#### Option A: Direct GCC Compilation / NPM Script
-```bash
-# Via Root npm script
-npm run build:cpp
-
-# Direct GCC Compilation
-g++ -std=c++17 cpp_core/src/main.cpp cpp_core/src/socket_engine.cpp cpp_core/src/room_manager.cpp -Icpp_core/include -lws2_32 -o cpp_core/cpp_chat_core
-
-# Run Server on Port 8080
-./cpp_core/cpp_chat_core 8080
-```
-
-#### Option B: CMake Build
-```bash
-cd cpp_core
-mkdir build && cd build
-cmake ..
-make
-./cpp_chat_core 8080
-```
-
----
-
-### 2. Run the Node.js Backend
-
-```bash
-cd backend
-npm install
-npm run dev
-```
-
----
-
-### 3. Run the React Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
----
-
-## 📡 API & Socket Event Reference
-
-### Message ACKs & Real-Time Status Events
-| Event Name | Direction | Payload Description |
-| :--- | :--- | :--- |
-| `messageDelivered` | Client ➔ Server | `{ messageId, senderId }` — Updates DB to `delivered` status. |
-| `messageStatusUpdated` | Server ➔ Sender | `{ messageId, status: "delivered", deliveredAt }` |
-| `messageRead` | Client ➔ Server | `{ senderId }` — Bulk updates unread room messages to `read`. |
-| `messagesMarkedRead` | Server ➔ Sender | `{ readBy, readAt }` |
-
-### AI RAG Stream Events
-| Event / Endpoint | Type | Description |
-| :--- | :--- | :--- |
-| `POST /api/ai/upload-doc` | REST | Uploads & indexes document chunks into the Vector Store. |
-| `POST /api/ai/query` | REST / Socket | Queries document vector store & streams AI tokens over socket (`aiToken` ➔ `aiDone`). |
