@@ -6,7 +6,7 @@ import {useAuthStore} from '../store/useAuthStore';
 
 function ChatsList() {
   const { getMyChatPartners, chats, isUsersLoading, setSelectedUser } = useChatStore();
-  const { onlineUsers } = useAuthStore();
+  const { onlineUsers, unreadMessages, clearUnread } = useAuthStore();
 
   useEffect(() => {
     getMyChatPartners();
@@ -23,7 +23,10 @@ function ChatsList() {
           <button
             key={chat._id}
             type="button"
-            onClick={() => setSelectedUser(chat)}
+            onClick={() => {
+                setSelectedUser(chat);
+                clearUnread(chat._id);
+            }}
             className="w-full text-left group bg-slate-900/60 hover:bg-slate-800/80 border border-slate-800/80 hover:border-cyan-500/60 rounded-xl px-3.5 py-3 transition-colors"
           >
             <div className="flex items-center gap-3">
@@ -40,6 +43,11 @@ function ChatsList() {
                   <span className="text-[10px] uppercase tracking-wide text-slate-500 group-hover:text-cyan-300">
                     {isOnline ? "Online" : "Offline"}
                   </span>
+                  {unreadMessages[chat._id] > 0 && (
+                      <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-cyan-500 rounded-full">
+                          {unreadMessages[chat._id]}
+                      </span>
+                  )}
                 </div>
                 <p className="mt-0.5 text-xs text-slate-500 truncate">
                   Tap to open your conversation

@@ -1,4 +1,7 @@
 #include "../include/socket_engine.hpp"
+#include "json.hpp"
+
+extern volatile sig_atomic_t g_running;
 
 #define MAX_EVENTS 64
 #define BUFFER_SIZE 4096
@@ -101,7 +104,7 @@ bool SocketEngine::start() {
 void SocketEngine::eventLoop() {
 #if defined(__linux__)
     struct epoll_event events[MAX_EVENTS];
-    while (isRunning) {
+    while (isRunning && g_running) {
         int nfds = epoll_wait(epollFd, events, MAX_EVENTS, 500); // 500ms timeout
         for (int i = 0; i < nfds; ++i) {
             int fd = events[i].data.fd;
@@ -120,7 +123,7 @@ void SocketEngine::eventLoop() {
     }
 #else
     // Windows / Cross-platform fallback poll loop
-    while (isRunning) {
+    while (isRunning && g_running) {
         fd_set readFds;
         FD_ZERO(&readFds);
         FD_SET(listenFd, &readFds);
@@ -136,11 +139,20 @@ void SocketEngine::eventLoop() {
 }
 
 void SocketEngine::handleIncomingConnection() {
-    sockaddr_in clientAddr{};
-    socklen_t addrLen = sizeof(clientAddr);
-    socket_t clientFd = accept(listenFd, (struct sockaddr*)&clientAddr, &addrLen);
+    while (true) {
+        sockaddr_in clientAddr{};
+        socklen_t addrLen = sizeof(clientAddr);
+        socket_t clientFd = accept(listenFd, (struct sockaddr*)&clientAddr, &addrLen);
 
-    if (IS_VALIDSOCKET(clientFd)) {
+        if (!IS_VALIDSOCKET(clientFd)) {
+#ifdef _WIN32
+            if (WSAGetLastError() == WSAEWOULDBLOCK) break;
+#else
+            if (errno == EAGAIN || errno == EWOULDBLOCK) break;
+#endif
+            break; // Other error
+        }
+
         setNonBlocking(clientFd);
 
 #if defined(__linux__)
@@ -175,27 +187,10 @@ void SocketEngine::handleClientData(socket_t clientFd) {
 
     roomManager->updateHeartbeat(clientFd);
 
-    // Read buffer assembly & custom 4-byte length prefix framing parser
-    ClientSession session;
-    if (roomManager->getClient(clientFd, session)) {
-        session.readBuffer.insert(session.readBuffer.end(), buffer, buffer + bytesRead);
-
-        while (session.readBuffer.size() >= 4) {
-            uint32_t payloadLength = 0;
-            std::memcpy(&payloadLength, session.readBuffer.data(), 4);
-            payloadLength = ntohl(payloadLength);
-
-            if (session.readBuffer.size() < 4 + payloadLength) {
-                // Partial frame received, wait for next buffer chunk
-                break;
-            }
-
-            // Full packet frame extracted
-            std::string payload((char*)session.readBuffer.data() + 4, payloadLength);
-            session.readBuffer.erase(session.readBuffer.begin(), session.readBuffer.begin() + 4 + payloadLength);
-
-            processPacketPayload(clientFd, payload);
-        }
+    // Thread-safe frame extraction directly on the stored session buffer
+    auto frames = roomManager->feedAndExtractFrames(clientFd, buffer, bytesRead);
+    for (const auto& payload : frames) {
+        processPacketPayload(clientFd, payload);
     }
 
 #if defined(__linux__)
@@ -210,17 +205,36 @@ void SocketEngine::handleClientData(socket_t clientFd) {
 void SocketEngine::processPacketPayload(socket_t clientFd, const std::string& payload) {
     std::cout << "[Packet Received fd " << clientFd << "]: " << payload << std::endl;
 
-    // Simple protocol commands check
-    if (payload.find("\"type\":\"PING\"") != std::string::npos) {
-        std::string pong = "{\"type\":\"PONG\"}";
-        sendFramed(clientFd, pong);
-    } else if (payload.find("\"type\":\"JOIN\"") != std::string::npos) {
-        roomManager->joinRoom(clientFd, "main_room");
-        std::string ack = "{\"type\":\"JOIN_ACK\",\"room\":\"main_room\"}";
-        sendFramed(clientFd, ack);
-    } else {
-        // Echo / Broadcast frame to room
-        broadcastToRoom("main_room", payload);
+    try {
+        auto packet = nlohmann::json::parse(payload);
+        std::string type = packet.value("type", "");
+
+        if (type == "PING") {
+            sendFramed(clientFd, R"({"type":"PONG"})");
+        } else if (type == "JOIN") {
+            std::string room = packet.value("room", "default");
+            roomManager->joinRoom(clientFd, room);
+            nlohmann::json ack = {{"type", "JOIN_ACK"}, {"room", room}};
+            sendFramed(clientFd, ack.dump());
+        } else if (type == "MSG") {
+            // Look up sender's room and broadcast
+            ClientSession session;
+            std::string targetRoom = "default";
+            if (roomManager->getClient(clientFd, session) && !session.roomId.empty()) {
+                targetRoom = session.roomId;
+            }
+            broadcastToRoom(targetRoom, payload);
+        } else {
+            // Unknown type — broadcast to sender's room as fallback
+            ClientSession session;
+            std::string targetRoom = "default";
+            if (roomManager->getClient(clientFd, session) && !session.roomId.empty()) {
+                targetRoom = session.roomId;
+            }
+            broadcastToRoom(targetRoom, payload);
+        }
+    } catch (const nlohmann::json::parse_error& e) {
+        std::cerr << "[SocketEngine]: JSON parse error from fd " << clientFd << ": " << e.what() << std::endl;
     }
 }
 
@@ -250,7 +264,7 @@ bool SocketEngine::broadcastToRoom(const std::string& roomId, const std::string&
 }
 
 void SocketEngine::heartbeatRoutine() {
-    while (isRunning) {
+    while (isRunning && g_running) {
         std::this_thread::sleep_for(std::chrono::seconds(15));
         if (!isRunning) break;
 

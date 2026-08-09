@@ -66,8 +66,8 @@ io.on("connection", (socket) => {
   // 2. Event: Recipient acknowledges delivery receipt
   socket.on("messageDelivered", async ({ messageId, senderId }) => {
     try {
-      const updatedMessage = await Message.findByIdAndUpdate(
-        messageId,
+      const updatedMessage = await Message.findOneAndUpdate(
+        { _id: messageId, status: { $ne: "read" } },
         { status: "delivered", deliveredAt: new Date() },
         { new: true }
       );

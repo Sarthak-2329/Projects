@@ -36,10 +36,10 @@ export const getMessagesByUserId = async (req, res) => {
     }
 
     const messages = await Message.find(query)
-      .sort({ createdAt: 1 })
+      .sort({ createdAt: -1 })
       .limit(parseInt(limit));
 
-    res.status(200).json(messages);
+    res.status(200).json(messages.reverse());
   } catch (error) {
     console.log("Error in getMessages controller: ", error.message);
     res.status(500).json({ error: "Internal server error" });

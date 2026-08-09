@@ -1,2 +1,7 @@
 node_modules
 .env
+
+# C++ build artifacts
+cpp_chat_core
+cpp_chat_core.exe
+cpp_core/build/

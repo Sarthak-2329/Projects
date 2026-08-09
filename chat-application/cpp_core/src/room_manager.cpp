@@ -1,4 +1,12 @@
 #include "../include/room_manager.hpp"
+#include <cstring>
+
+#ifdef _WIN32
+  #include <winsock2.h>
+#else
+  #include <arpa/inet.h>
+#endif
+
 
 void RoomManager::addClient(int socketFd, const std::string& userId, const std::string& fullName, const std::string& roomId) {
     std::lock_guard<std::mutex> lock(managerMutex);
@@ -84,4 +92,26 @@ bool RoomManager::getClient(int socketFd, ClientSession& outSession) {
 size_t RoomManager::getConnectedCount() {
     std::lock_guard<std::mutex> lock(managerMutex);
     return sessions.size();
+}
+
+std::vector<std::string> RoomManager::feedAndExtractFrames(int socketFd, const uint8_t* data, size_t len) {
+    std::lock_guard<std::mutex> lock(managerMutex);
+    std::vector<std::string> frames;
+    auto it = sessions.find(socketFd);
+    if (it == sessions.end()) return frames;
+    
+    auto& buf = it->second.readBuffer;
+    buf.insert(buf.end(), data, data + len);
+    
+    while (buf.size() >= 4) {
+        uint32_t payloadLength = 0;
+        std::memcpy(&payloadLength, buf.data(), 4);
+        payloadLength = ntohl(payloadLength);
+        
+        if (buf.size() < 4 + payloadLength) break;
+        
+        frames.emplace_back(reinterpret_cast<const char*>(buf.data() + 4), payloadLength);
+        buf.erase(buf.begin(), buf.begin() + 4 + payloadLength);
+    }
+    return frames;
 }

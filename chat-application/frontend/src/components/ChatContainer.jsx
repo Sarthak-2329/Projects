@@ -12,24 +12,42 @@ function ChatContainer() {
     getMessagesByUserId,
     messages,
     isMessagesLoading,
-    subscribeToMessages,
-    unsubscribeFromMessages,
+    hasMoreMessages,
+    isLoadingMore,
+    loadMoreMessages,
   } = useChatStore();
   const { authUser } = useAuthStore();
   const messageEndRef = useRef(null);
+  const scrollContainerRef = useRef(null);
+
+  const handleScroll = () => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    if (container.scrollTop < 50 && hasMoreMessages && !isLoadingMore) {
+        const prevScrollHeight = container.scrollHeight;
+        loadMoreMessages(selectedUser._id).then(() => {
+            // Restore scroll position after prepend
+            requestAnimationFrame(() => {
+                if (scrollContainerRef.current) {
+                    scrollContainerRef.current.scrollTop =
+                        scrollContainerRef.current.scrollHeight - prevScrollHeight;
+                }
+            });
+        });
+    }
+  };
 
   useEffect(() => {
     getMessagesByUserId(selectedUser._id);
-    subscribeToMessages();
-
-    // clean up
-    return () => unsubscribeFromMessages();
-  }, [
-    selectedUser,
-    getMessagesByUserId,
-    subscribeToMessages,
-    unsubscribeFromMessages,
-  ]);
+    
+    // Mark messages as read
+    const socket = useAuthStore.getState().socket;
+    if (socket) {
+        socket.emit("messageRead", { senderId: selectedUser._id });
+    }
+    // Also clear unread badge
+    useAuthStore.getState().clearUnread(selectedUser._id);
+  }, [selectedUser._id, getMessagesByUserId]);
 
   useEffect(() => {
     if (messageEndRef.current) {
@@ -40,7 +58,11 @@ function ChatContainer() {
   return (
     <>
       <ChatHeader />
-      <div className="flex-1 px-4 md:px-6 overflow-y-auto py-6 subtle-scroll bg-gradient-to-b from-slate-950/40 via-slate-950/80 to-slate-950">
+      <div 
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 px-4 md:px-6 overflow-y-auto py-6 subtle-scroll bg-gradient-to-b from-slate-950/40 via-slate-950/80 to-slate-950"
+      >
         {messages.length > 0 && !isMessagesLoading ? (
           <div className="w-full space-y-4 md:space-y-6">
             {messages.map((msg) => (
@@ -68,6 +90,11 @@ function ChatContainer() {
                       hour: "2-digit",
                       minute: "2-digit",
                     })}
+                    {msg.senderId === authUser._id && (
+                        <span className={`ml-1 ${msg.status === 'read' ? 'text-blue-400' : msg.status === 'delivered' ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {msg.status === "read" ? "✓✓" : msg.status === "delivered" ? "✓✓" : msg.status === "sending" ? "◌" : "✓"}
+                        </span>
+                    )}
                   </p>
                 </div>
               </div>

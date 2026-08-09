@@ -52,6 +52,9 @@ public:
     // Get client info
     bool getClient(int socketFd, ClientSession& outSession);
 
+    // Atomically append data to client's readBuffer and extract complete frames
+    std::vector<std::string> feedAndExtractFrames(int socketFd, const uint8_t* data, size_t len);
+
     // Total connected clients count
     size_t getConnectedCount();
 

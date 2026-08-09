@@ -2,6 +2,7 @@ import {create} from 'zustand';
 import {axiosInstance} from "../lib/axios";
 import toast from 'react-hot-toast';
 import {io} from 'socket.io-client';
+import { useChatStore } from './useChatStore';
 
 const BASE_URL = import.meta.env.MODE==="development" ? "http://localhost:3000" : "/";
 
@@ -12,6 +13,13 @@ export const useAuthStore = create((set,get)=>({
     isLoggingIn:false,
     socket:null,
     onlineUsers:[],
+    unreadMessages: {},
+
+    clearUnread: (userId) => set((state) => {
+        const updated = { ...state.unreadMessages };
+        delete updated[userId];
+        return { unreadMessages: updated };
+    }),
 
     checkAuth: async ()=>{
         try {
@@ -90,6 +98,43 @@ export const useAuthStore = create((set,get)=>({
 
         socket.on("getOnlineUsers",(userIds)=>{
             set({onlineUsers:userIds});
+        });
+
+        socket.on("newMessage", (newMessage) => {
+            const { selectedUser } = useChatStore.getState();
+            if (selectedUser && newMessage.senderId === selectedUser._id) {
+                // Message is for the currently open chat — add to messages
+                useChatStore.getState().addIncomingMessage(newMessage);
+            } else {
+                // Message from a different user — increment unread count
+                set((state) => ({
+                    unreadMessages: {
+                        ...state.unreadMessages,
+                        [newMessage.senderId]: (state.unreadMessages[newMessage.senderId] || 0) + 1,
+                    },
+                }));
+                // Refresh chat partners list
+                useChatStore.getState().getMyChatPartners();
+            }
+
+            // Play notification sound if enabled
+            const { isSoundEnabled } = useChatStore.getState();
+            if (isSoundEnabled) {
+                const notificationSound = new Audio("/sounds/notification.mp3");
+                notificationSound.currentTime = 0;
+                notificationSound.play().catch((e) => console.log("Audio play error:", e));
+            }
+        });
+
+        socket.on("messageStatusUpdated", ({ messageId, status, deliveredAt }) => {
+            useChatStore.getState().updateMessageStatus(messageId, status, deliveredAt);
+        });
+
+        socket.on("messagesMarkedRead", ({ readBy, readAt }) => {
+            const { authUser } = get();
+            if (authUser) {
+                useChatStore.getState().markAllReadFromSender(authUser._id, readAt);
+            }
         });
     },
 
