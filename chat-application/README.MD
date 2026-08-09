@@ -3,8 +3,6 @@
   <b>High-Concurrency C++ Core Engine • Node.js Microservices • Socket.io Redis Cluster • RAG Document AI Streaming</b>
 </p>
 
-![Demo App](/frontend/public/screenshot-for-readme.png)
-
 ---
 
 ## 🌟 Key Architecture & Technical Highlights
