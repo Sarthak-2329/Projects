@@ -1,6 +1,5 @@
-
 import cloudinary from "../lib/cloudinary.js";
-import { getReceiverSocketId, io } from "../lib/socket.js";
+import { getUserSocketIds, io } from "../lib/socket.js";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
 
@@ -16,17 +15,29 @@ export const getAllContacts = async (req, res) => {
   }
 };
 
+/**
+ * Cursor-based pagination for chat history reads using compound index
+ */
 export const getMessagesByUserId = async (req, res) => {
   try {
     const myId = req.user._id;
     const { id: userToChatId } = req.params;
+    const { cursor, limit = 50 } = req.query;
 
-    const messages = await Message.find({
+    const query = {
       $or: [
         { senderId: myId, receiverId: userToChatId },
         { senderId: userToChatId, receiverId: myId },
       ],
-    });
+    };
+
+    if (cursor) {
+      query.createdAt = { $lt: new Date(cursor) };
+    }
+
+    const messages = await Message.find(query)
+      .sort({ createdAt: 1 })
+      .limit(parseInt(limit));
 
     res.status(200).json(messages);
   } catch (error) {
@@ -54,28 +65,61 @@ export const sendMessage = async (req, res) => {
 
     let imageUrl;
     if (image) {
-      // upload base64 image to cloudinary
       const uploadResponse = await cloudinary.uploader.upload(image);
       imageUrl = uploadResponse.secure_url;
     }
 
+    // Immediate Sent ACK status creation
     const newMessage = new Message({
       senderId,
       receiverId,
       text,
       image: imageUrl,
+      status: "sent",
     });
 
     await newMessage.save();
 
-    const receiverSocketId = getReceiverSocketId(receiverId);
-    if (receiverSocketId) {
-      io.to(receiverSocketId).emit("newMessage", newMessage);
+    // Check if receiver is online to auto-mark delivered
+    const receiverSocketIds = getUserSocketIds(receiverId);
+    if (receiverSocketIds.length > 0) {
+      newMessage.status = "delivered";
+      newMessage.deliveredAt = new Date();
+      await newMessage.save();
+
+      // Emit to receiver's user room
+      io.to(`user:${receiverId}`).emit("newMessage", newMessage);
     }
 
-    res.status(201).json(newMessage);
+    res.status(201).json({
+      ack: true,
+      message: newMessage,
+    });
   } catch (error) {
     console.log("Error in sendMessage controller: ", error.message);
+    res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+export const markMessagesAsRead = async (req, res) => {
+  try {
+    const { id: senderId } = req.params;
+    const receiverId = req.user._id;
+
+    const now = new Date();
+    await Message.updateMany(
+      { senderId, receiverId, status: { $ne: "read" } },
+      { $set: { status: "read", readAt: now } }
+    );
+
+    io.to(`user:${senderId}`).emit("messagesMarkedRead", {
+      readBy: receiverId,
+      readAt: now,
+    });
+
+    res.status(200).json({ success: true, readAt: now });
+  } catch (error) {
+    console.error("Error in markMessagesAsRead: ", error.message);
     res.status(500).json({ error: "Internal server error" });
   }
 };
@@ -84,7 +128,6 @@ export const getChatPartners = async (req, res) => {
   try {
     const loggedInUserId = req.user._id;
 
-    // find all the messages where the logged-in user is either sender or receiver
     const messages = await Message.find({
       $or: [{ senderId: loggedInUserId }, { receiverId: loggedInUserId }],
     });
