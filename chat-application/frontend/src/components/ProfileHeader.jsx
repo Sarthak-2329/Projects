@@ -31,9 +31,9 @@ function ProfileHeader() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           {/* AVATAR */}
-          <div className="avatar online">
+          <div className="relative">
             <button
-              className="size-14 rounded-full overflow-hidden relative group"
+              className="size-14 rounded-full overflow-hidden relative group ring-1 ring-slate-700/80 ring-offset-2 ring-offset-slate-900"
               onClick={() => fileInputRef.current.click()}
             >
               <img
@@ -45,6 +45,7 @@ function ProfileHeader() {
                 <span className="text-white text-xs">Change</span>
               </div>
             </button>
+            <span className="absolute bottom-0 right-1 w-3.5 h-3.5 bg-green-500 border-2 border-slate-900 rounded-full"></span>
 
             <input
               type="file"

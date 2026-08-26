@@ -1,22 +1,76 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import useKeyboardSound from "../hooks/useKeyboardSound";
 import { useChatStore } from "../store/useChatStore";
+import { useAuthStore } from "../store/useAuthStore";
 import toast from "react-hot-toast";
 import { ImageIcon, SendIcon, XIcon } from "lucide-react";
+
+const TYPING_STOP_DELAY = 1000; // ms of silence before emitting stopTyping
 
 function MessageInput() {
   const { playRandomKeyStrokeSound } = useKeyboardSound();
   const [text, setText] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
-
   const fileInputRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
+  const textareaRef = useRef(null);
 
-  const { sendMessage, isSoundEnabled } = useChatStore();
+  const { sendMessage, isSoundEnabled, selectedUser, quickReplyText, setQuickReply } = useChatStore();
+  const { socket } = useAuthStore();
+
+  // Auto-grow textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
+    }
+  }, [text]);
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage(e);
+    }
+  };
+
+  // --- Item 6: Prefill from quick-reply buttons ---
+  useEffect(() => {
+    if (quickReplyText) {
+      setText(quickReplyText);
+      setQuickReply("");
+    }
+  }, [quickReplyText, setQuickReply]);
+
+  // --- Item 5: Typing indicator helpers ---
+  const emitTyping = () => {
+    if (!socket || !selectedUser) return;
+    socket.emit("typing", { receiverId: selectedUser._id });
+  };
+
+  const emitStopTyping = () => {
+    if (!socket || !selectedUser) return;
+    socket.emit("stopTyping", { receiverId: selectedUser._id });
+  };
+
+  const handleTextChange = (e) => {
+    setText(e.target.value);
+    if (isSoundEnabled) playRandomKeyStrokeSound();
+
+    emitTyping();
+
+    // Debounce: reset the stop-typing timer on every keystroke
+    clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(emitStopTyping, TYPING_STOP_DELAY);
+  };
 
   const handleSendMessage = (e) => {
     e.preventDefault();
     if (!text.trim() && !imagePreview) return;
     if (isSoundEnabled) playRandomKeyStrokeSound();
+
+    // Cancel any pending stop-typing timeout and emit immediately
+    clearTimeout(typingTimeoutRef.current);
+    emitStopTyping();
 
     sendMessage({
       text: text.trim(),
@@ -67,15 +121,15 @@ function MessageInput() {
       )}
 
       <form onSubmit={handleSendMessage} className="max-w-3xl mx-auto flex space-x-4">
-        <input
-          type="text"
+        <textarea
+          ref={textareaRef}
           value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            isSoundEnabled && playRandomKeyStrokeSound();
-          }}
-          className="flex-1 bg-slate-900/70 border border-slate-800/80 rounded-xl py-2.5 px-4 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/70 focus:border-transparent"
+          onChange={handleTextChange}
+          onKeyDown={handleKeyDown}
+          className="flex-1 bg-slate-900/70 border border-slate-800/80 rounded-xl py-2.5 px-4 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/70 focus:border-transparent resize-none overflow-y-auto max-h-32 subtle-scroll"
           placeholder="Type your message..."
+          rows={1}
+          style={{ minHeight: "44px" }}
         />
 
         <input

@@ -1,4 +1,5 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { XIcon } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 import ChatHeader from "./ChatHeader";
@@ -20,13 +21,25 @@ function ChatContainer() {
   const messageEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
 
+  // --- Item 8: Lightbox ---
+  const [lightboxUrl, setLightboxUrl] = useState(null);
+
+  useEffect(() => {
+    if (!lightboxUrl) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") setLightboxUrl(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [lightboxUrl]);
+  // -----------------------
+
   const handleScroll = () => {
     const container = scrollContainerRef.current;
     if (!container) return;
     if (container.scrollTop < 50 && hasMoreMessages && !isLoadingMore) {
         const prevScrollHeight = container.scrollHeight;
         loadMoreMessages(selectedUser._id).then(() => {
-            // Restore scroll position after prepend
             requestAnimationFrame(() => {
                 if (scrollContainerRef.current) {
                     scrollContainerRef.current.scrollTop =
@@ -40,12 +53,10 @@ function ChatContainer() {
   useEffect(() => {
     getMessagesByUserId(selectedUser._id);
     
-    // Mark messages as read
     const socket = useAuthStore.getState().socket;
     if (socket) {
         socket.emit("messageRead", { senderId: selectedUser._id });
     }
-    // Also clear unread badge
     useAuthStore.getState().clearUnread(selectedUser._id);
   }, [selectedUser._id, getMessagesByUserId]);
 
@@ -68,20 +79,21 @@ function ChatContainer() {
             {messages.map((msg) => (
               <div
                 key={msg._id}
-                className={`chat w-full ${msg.senderId === authUser._id ? "chat-end" : "chat-start"}`}
+                className={`flex w-full ${msg.senderId === authUser._id ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`chat-bubble relative shadow-lg ${
+                  className={`relative shadow-lg max-w-[80%] md:max-w-[70%] px-4 py-3 ${
                     msg.senderId === authUser._id
-                      ? "bg-gradient-to-r from-cyan-500 to-cyan-600 text-white"
-                      : "bg-slate-900 text-slate-100 border border-slate-800/90"
+                      ? "rounded-2xl rounded-br-sm bg-gradient-to-r from-cyan-500 to-cyan-600 text-white"
+                      : "rounded-2xl rounded-bl-sm bg-slate-900 text-slate-100 border border-slate-800/90"
                   }`}
                 >
                   {msg.image && (
                     <img
                       src={msg.image}
                       alt="Shared"
-                      className="rounded-lg h-48 object-cover mb-1 border border-slate-800/80"
+                      onClick={() => setLightboxUrl(msg.image)}
+                      className="rounded-lg h-48 object-cover mb-1 border border-slate-800/80 cursor-pointer hover:opacity-90 transition-opacity"
                     />
                   )}
                   {msg.text && <p className="mt-2">{msg.text}</p>}
@@ -99,7 +111,7 @@ function ChatContainer() {
                 </div>
               </div>
             ))}
-            {/* 👇 scroll target */}
+            {/* scroll target */}
             <div ref={messageEndRef} />
           </div>
         ) : isMessagesLoading ? (
@@ -110,6 +122,32 @@ function ChatContainer() {
       </div>
 
       <MessageInput />
+
+      {/* Lightbox overlay */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <img
+            src={lightboxUrl}
+            alt="Full size"
+            className="max-h-[90vh] max-w-[90vw] object-contain rounded-xl shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            type="button"
+            onClick={() => setLightboxUrl(null)}
+            className="absolute top-4 right-4 inline-flex items-center justify-center w-9 h-9 rounded-full bg-slate-900/80 border border-slate-700 text-slate-200 hover:bg-slate-800 transition-colors"
+            aria-label="Close"
+          >
+            <XIcon className="w-4 h-4" />
+          </button>
+          <p className="absolute bottom-4 text-slate-400 text-xs">
+            Click outside or press Esc to close
+          </p>
+        </div>
+      )}
     </>
   );
 }

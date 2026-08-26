@@ -11,6 +11,12 @@ export const useAuthStore = create((set,get)=>({
     isCheckingAuth:true,
     isSigningUp:false,
     isLoggingIn:false,
+    isRequestingReset: false,
+    isResettingPassword: false,
+    isVerifyingEmail: false,
+    isResendingVerification: false,
+    /** Non-null while the user has signed up but not yet verified their email. */
+    pendingVerificationEmail: null,
     socket:null,
     onlineUsers:[],
     unreadMessages: {},
@@ -34,20 +40,33 @@ export const useAuthStore = create((set,get)=>({
         }
     },
 
+    // -------------------------------------------------------------------------
+    // Signup — no JWT is issued; backend returns { pendingVerification, email }.
+    // Sets pendingVerificationEmail so SignUpPage shows a "check your inbox" UI.
+    // -------------------------------------------------------------------------
     signup: async (data)=>{
         set({isSigningUp:true});
         try {
             const res = await axiosInstance.post("/auth/signup",data);
-            set({authUser:res.data});
-            toast.success("Account created successfully!");
-            get().connectSocket();
+            if (res.data.pendingVerification) {
+                set({ pendingVerificationEmail: res.data.email });
+                toast.success("Account created! Check your email to verify.");
+            } else {
+                // Defensive fallback (should not occur with current backend)
+                set({authUser:res.data});
+                get().connectSocket();
+            }
         } catch (error) {
-            toast.error(error.response.data.message);
+            toast.error(error.response?.data?.message || "Signup failed");
         }finally{
             set({isSigningUp:false});
         }
     },
 
+    // -------------------------------------------------------------------------
+    // Login — returns the error code string on failure so the page can show
+    // a targeted UI for EMAIL_UNVERIFIED without a generic toast.
+    // -------------------------------------------------------------------------
     login: async (data)=>{
         set({isLoggingIn:true});
         try {
@@ -55,8 +74,13 @@ export const useAuthStore = create((set,get)=>({
             set({authUser:res.data});
             toast.success("Logged in successfully");
             get().connectSocket();
+            return null;
         } catch (error) {
-            toast.error(error.response.data.message);
+            const code = error.response?.data?.code;
+            if (code !== 'EMAIL_UNVERIFIED') {
+                toast.error(error.response?.data?.message || "Login failed");
+            }
+            return code || null;
         }finally{
             set({isLoggingIn:false});
         }
@@ -81,10 +105,81 @@ export const useAuthStore = create((set,get)=>({
             toast.success("Profile updated successfully");
         } catch (error) {
             console.log("Error in update profile: ",error);
-            toast.error(error.response.data.message);
+            toast.error(error.response?.data?.message || "Update failed");
         }
     },
 
+    // -------------------------------------------------------------------------
+    // Email verification — POSTs the raw token (from the URL) to the backend.
+    // On success the backend issues a JWT cookie and returns the user object.
+    // -------------------------------------------------------------------------
+    verifyEmail: async (token) => {
+        set({ isVerifyingEmail: true });
+        try {
+            const res = await axiosInstance.post("/auth/verify-email", { token });
+            set({ authUser: res.data, pendingVerificationEmail: null });
+            toast.success("Email verified! Welcome to Messenger 🎉");
+            get().connectSocket();
+            return true;
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Verification failed. The link may have expired.");
+            return false;
+        } finally {
+            set({ isVerifyingEmail: false });
+        }
+    },
+
+    // -------------------------------------------------------------------------
+    // Resend verification email — used from SignUpPage and VerifyEmailPage.
+    // -------------------------------------------------------------------------
+    resendVerification: async (email) => {
+        set({ isResendingVerification: true });
+        try {
+            await axiosInstance.post("/auth/resend-verification", { email });
+            toast.success("Verification email sent! Check your inbox.");
+            return true;
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Failed to resend. Please try again.");
+            return false;
+        } finally {
+            set({ isResendingVerification: false });
+        }
+    },
+
+    // -------------------------------------------------------------------------
+    // Password reset (item 4)
+    // -------------------------------------------------------------------------
+    forgotPassword: async (email) => {
+        set({ isRequestingReset: true });
+        try {
+            await axiosInstance.post("/auth/forgot-password", { email });
+            toast.success("If that email is registered, a reset link has been sent.");
+            return true;
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Something went wrong. Please try again.");
+            return false;
+        } finally {
+            set({ isRequestingReset: false });
+        }
+    },
+
+    resetPassword: async (token, password) => {
+        set({ isResettingPassword: true });
+        try {
+            await axiosInstance.post(`/auth/reset-password/${token}`, { password });
+            toast.success("Password reset successful! You can now log in.");
+            return true;
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Invalid or expired reset link.");
+            return false;
+        } finally {
+            set({ isResettingPassword: false });
+        }
+    },
+
+    // -------------------------------------------------------------------------
+    // Socket.io
+    // -------------------------------------------------------------------------
     connectSocket: ()=>{
         const {authUser} = get();
         if(!authUser || get().socket?.connected) return;
@@ -103,21 +198,17 @@ export const useAuthStore = create((set,get)=>({
         socket.on("newMessage", (newMessage) => {
             const { selectedUser } = useChatStore.getState();
             if (selectedUser && newMessage.senderId === selectedUser._id) {
-                // Message is for the currently open chat — add to messages
                 useChatStore.getState().addIncomingMessage(newMessage);
             } else {
-                // Message from a different user — increment unread count
                 set((state) => ({
                     unreadMessages: {
                         ...state.unreadMessages,
                         [newMessage.senderId]: (state.unreadMessages[newMessage.senderId] || 0) + 1,
                     },
                 }));
-                // Refresh chat partners list
                 useChatStore.getState().getMyChatPartners();
             }
 
-            // Play notification sound if enabled
             const { isSoundEnabled } = useChatStore.getState();
             if (isSoundEnabled) {
                 const notificationSound = new Audio("/sounds/notification.mp3");
@@ -136,6 +227,9 @@ export const useAuthStore = create((set,get)=>({
                 useChatStore.getState().markAllReadFromSender(authUser._id, readAt);
             }
         });
+
+        socket.on("typing",     ({ senderId }) => useChatStore.getState().setUserTyping(senderId));
+        socket.on("stopTyping", ({ senderId }) => useChatStore.getState().clearUserTyping(senderId));
     },
 
     disconnectSocket: ()=>{

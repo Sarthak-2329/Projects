@@ -1,5 +1,5 @@
 import cloudinary from "../lib/cloudinary.js";
-import { getUserSocketIds, io } from "../lib/socket.js";
+import { isUserOnline, io } from "../lib/socket.js";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
 
@@ -80,14 +80,14 @@ export const sendMessage = async (req, res) => {
 
     await newMessage.save();
 
-    // Check if receiver is online to auto-mark delivered
-    const receiverSocketIds = getUserSocketIds(receiverId);
-    if (receiverSocketIds.length > 0) {
+    // Check if receiver is online (across all instances via Redis when available)
+    const receiverOnline = await isUserOnline(receiverId);
+    if (receiverOnline) {
       newMessage.status = "delivered";
       newMessage.deliveredAt = new Date();
       await newMessage.save();
 
-      // Emit to receiver's user room
+      // Emit to receiver's user room (Redis adapter routes cross-instance)
       io.to(`user:${receiverId}`).emit("newMessage", newMessage);
     }
 
@@ -96,6 +96,10 @@ export const sendMessage = async (req, res) => {
       message: newMessage,
     });
   } catch (error) {
+    if (error.name === "ValidationError") {
+      const messages = Object.values(error.errors).map((val) => val.message);
+      return res.status(400).json({ error: messages.join(", ") });
+    }
     console.log("Error in sendMessage controller: ", error.message);
     res.status(500).json({ error: "Internal server error" });
   }
@@ -128,23 +132,64 @@ export const getChatPartners = async (req, res) => {
   try {
     const loggedInUserId = req.user._id;
 
-    const messages = await Message.find({
-      $or: [{ senderId: loggedInUserId }, { receiverId: loggedInUserId }],
-    });
+    /**
+     * Single aggregation pipeline:
+     * 1. Match every message the user sent or received.
+     * 2. Derive the other participant as `partnerId`.
+     * 3. Sort all messages newest-first so $first inside $group gives the latest.
+     * 4. Group by partnerId — one document per conversation with the latest message.
+     * 5. Re-sort the per-conversation documents by most recent activity.
+     * 6. $lookup partner user documents (excludes password via $project).
+     * 7. Project a flat object with user fields + last-message metadata.
+     */
+    const partners = await Message.aggregate([
+      {
+        $match: {
+          $or: [{ senderId: loggedInUserId }, { receiverId: loggedInUserId }],
+        },
+      },
+      {
+        $addFields: {
+          partnerId: {
+            $cond: [{ $eq: ["$senderId", loggedInUserId] }, "$receiverId", "$senderId"],
+          },
+        },
+      },
+      { $sort: { createdAt: -1 } },
+      {
+        $group: {
+          _id:                 "$partnerId",
+          lastMessageText:     { $first: "$text" },
+          lastMessageImage:    { $first: "$image" },
+          lastMessageAt:       { $first: "$createdAt" },
+          lastMessageSenderId: { $first: "$senderId" },
+        },
+      },
+      { $sort: { lastMessageAt: -1 } },
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+      { $unwind: "$user" },
+      {
+        $project: {
+          _id:                 "$user._id",
+          fullName:            "$user.fullName",
+          email:               "$user.email",
+          profilePic:          "$user.profilePic",
+          lastMessageText:     1,
+          lastMessageImage:    1,
+          lastMessageAt:       1,
+          lastMessageSenderId: 1,
+        },
+      },
+    ]);
 
-    const chatPartnerIds = [
-      ...new Set(
-        messages.map((msg) =>
-          msg.senderId.toString() === loggedInUserId.toString()
-            ? msg.receiverId.toString()
-            : msg.senderId.toString()
-        )
-      ),
-    ];
-
-    const chatPartners = await User.find({ _id: { $in: chatPartnerIds } }).select("-password");
-
-    res.status(200).json(chatPartners);
+    res.status(200).json(partners);
   } catch (error) {
     console.error("Error in getChatPartners: ", error.message);
     res.status(500).json({ error: "Internal server error" });

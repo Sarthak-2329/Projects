@@ -1,0 +1,115 @@
+# =============================================================================
+# Messenger – Docker Compose
+#
+# Usage:
+#   1. cp backend/.env.example backend/.env  and fill in real values
+#   2. Create a .env file in THIS directory with the secrets listed below, OR
+#      export them as shell variables before running docker compose.
+#   3. docker compose up --build
+#
+# Required shell / .env secrets (at repo root):
+#   JWT_SECRET, RESEND_API_KEY, EMAIL_FROM, EMAIL_FROM_NAME,
+#   CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET,
+#   ARCJET_KEY
+#
+# Services:
+#   mongo     – MongoDB 7                 (internal only)
+#   redis     – Redis 7                   (internal only)
+#   backend   – Node/Express/Socket.io    → localhost:3000
+#   frontend  – nginx serving React SPA   → localhost:80
+#   cpp_core  – Standalone C++ TCP engine → localhost:8080
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # MongoDB
+  # ---------------------------------------------------------------------------
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: chat
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Redis
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Backend  (Node / Express / Socket.io)
+  # Build context is the repo root so the "file:.." local dep resolves.
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongo:27017/chat
+      REDIS_URL: redis://redis:6379
+      CLIENT_URL: http://localhost
+      JWT_SECRET: ${JWT_SECRET}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Messenger}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+      ARCJET_KEY: ${ARCJET_KEY}
+      ARCJET_ENV: production
+
+  # ---------------------------------------------------------------------------
+  # Frontend  (nginx serving Vite build, proxies /api + /socket.io to backend)
+  # Build context is the repo root so the "file:.." local dep resolves.
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+  # ---------------------------------------------------------------------------
+  # C++ TCP engine  (standalone systems demo — see README for protocol docs)
+  # ---------------------------------------------------------------------------
+  cpp_core:
+    build: ./cpp_core
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+
+# ---------------------------------------------------------------------------
+# Named volumes
+# ---------------------------------------------------------------------------
+volumes:
+  mongo_data:
+  redis_data:

@@ -19,6 +19,22 @@ const userSchema = new mongoose.Schema({
         type:String,
         default:"",
     },
+    passwordResetToken:{
+        type:String,
+    },
+    passwordResetExpires:{
+        type:Date,
+    },
+    isEmailVerified:{
+        type:Boolean,
+        default:false,
+    },
+    emailVerifyToken:{
+        type:String,
+    },
+    emailVerifyExpires:{
+        type:Date,
+    },
 },{timestamps:true});
 
 const User = mongoose.model("User",userSchema);

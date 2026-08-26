@@ -15,6 +15,28 @@ export const useChatStore = create((set,get)=>({
     isMessagesLoading:false,
     isSoundEnabled:localStorage.getItem("isSoundEnabled")==="true",
 
+    // --- Item 5: Typing indicators ---
+    typingUsers: new Set(), // Set of userIds currently typing
+
+    setUserTyping: (userId) => set((state) => {
+        const next = new Set(state.typingUsers);
+        next.add(userId);
+        return { typingUsers: next };
+    }),
+
+    clearUserTyping: (userId) => set((state) => {
+        const next = new Set(state.typingUsers);
+        next.delete(userId);
+        return { typingUsers: next };
+    }),
+
+    // --- Item 6: Quick-reply prefill ---
+    quickReplyText: "",
+
+    setQuickReply: (text) => set({ quickReplyText: text }),
+
+    // -----------------------------------------------------------------------
+
     toggleSound: ()=>{
         localStorage.setItem("isSoundEnabled",!get().isSoundEnabled);
         set({isSoundEnabled:!get().isSoundEnabled});
@@ -22,7 +44,8 @@ export const useChatStore = create((set,get)=>({
 
     setActiveTab: (tab)=>set({activeTab:tab}),
 
-    setSelectedUser: (selectedUser)=>set({selectedUser}),
+    // Reset typing state when switching conversations
+    setSelectedUser: (selectedUser) => set({ selectedUser, typingUsers: new Set() }),
 
     getAllContacts: async ()=>{
         set({isUsersLoading:true});
