@@ -100,4 +100,44 @@ describe('POST /api/messages/send/:receiverId', () => {
       .send({ text: 'Talking to myself' });
     expect(res.status).toBe(400);
   });
+
+  it('returns 400 on malformed receiver ObjectId (CastError)', async () => {
+    const { agent } = await makeAuthenticatedAgent('caster@test.com');
+
+    const res = await agent
+      .post('/api/messages/send/not-a-valid-object-id')
+      .send({ text: 'Hello invalid ID' });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('Invalid ID format');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /api/messages/contacts
+// ---------------------------------------------------------------------------
+describe('GET /api/messages/contacts', () => {
+  it('only returns verified users in the contacts list', async () => {
+    const { agent } = await makeAuthenticatedAgent('caller@test.com');
+
+    // Create one verified user and one unverified user
+    const salt = await bcrypt.genSalt(10);
+    await User.create({
+      fullName: 'Verified Contact',
+      email: 'verified.contact@test.com',
+      password: await bcrypt.hash('password123', salt),
+      isEmailVerified: true,
+    });
+    await User.create({
+      fullName: 'Unverified Contact',
+      email: 'unverified.contact@test.com',
+      password: await bcrypt.hash('password123', salt),
+      isEmailVerified: false,
+    });
+
+    const res = await agent.get('/api/messages/contacts');
+    expect(res.status).toBe(200);
+    const emails = res.body.map((u) => u.email);
+    expect(emails).toContain('verified.contact@test.com');
+    expect(emails).not.toContain('unverified.contact@test.com');
+  });
 });

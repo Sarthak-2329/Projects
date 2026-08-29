@@ -57,9 +57,7 @@ services:
   # Build context is the repo root so the "file:.." local dep resolves.
   # ---------------------------------------------------------------------------
   backend:
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
+    build: ./backend
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -86,12 +84,9 @@ services:
 
   # ---------------------------------------------------------------------------
   # Frontend  (nginx serving Vite build, proxies /api + /socket.io to backend)
-  # Build context is the repo root so the "file:.." local dep resolves.
   # ---------------------------------------------------------------------------
   frontend:
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
+    build: ./frontend
     restart: unless-stopped
     ports:
       - "80:80"

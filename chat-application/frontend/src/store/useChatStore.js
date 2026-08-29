@@ -3,6 +3,9 @@ import { axiosInstance } from '../lib/axios';
 import toast from 'react-hot-toast';
 import { useAuthStore } from './useAuthStore';
 
+// Map of typing timeouts per user to guarantee cleanup on unexpected disconnect
+const typingTimeouts = new Map();
+
 export const useChatStore = create((set,get)=>({
     allContacts:[],
     chats:[],
@@ -18,17 +21,36 @@ export const useChatStore = create((set,get)=>({
     // --- Item 5: Typing indicators ---
     typingUsers: new Set(), // Set of userIds currently typing
 
-    setUserTyping: (userId) => set((state) => {
-        const next = new Set(state.typingUsers);
-        next.add(userId);
-        return { typingUsers: next };
-    }),
+    setUserTyping: (userId) => {
+        // Clear any existing auto-clear timer for this user
+        if (typingTimeouts.has(userId)) {
+            clearTimeout(typingTimeouts.get(userId));
+        }
 
-    clearUserTyping: (userId) => set((state) => {
-        const next = new Set(state.typingUsers);
-        next.delete(userId);
-        return { typingUsers: next };
-    }),
+        // Set auto-clear timer for 4s in case stopTyping is missed
+        const timeout = setTimeout(() => {
+            get().clearUserTyping(userId);
+        }, 4000);
+        typingTimeouts.set(userId, timeout);
+
+        set((state) => {
+            const next = new Set(state.typingUsers);
+            next.add(userId);
+            return { typingUsers: next };
+        });
+    },
+
+    clearUserTyping: (userId) => {
+        if (typingTimeouts.has(userId)) {
+            clearTimeout(typingTimeouts.get(userId));
+            typingTimeouts.delete(userId);
+        }
+        set((state) => {
+            const next = new Set(state.typingUsers);
+            next.delete(userId);
+            return { typingUsers: next };
+        });
+    },
 
     // --- Item 6: Quick-reply prefill ---
     quickReplyText: "",
@@ -45,7 +67,12 @@ export const useChatStore = create((set,get)=>({
     setActiveTab: (tab)=>set({activeTab:tab}),
 
     // Reset typing state when switching conversations
-    setSelectedUser: (selectedUser) => set({ selectedUser, typingUsers: new Set() }),
+    setSelectedUser: (selectedUser) => {
+        // Clean up all typing timeouts
+        typingTimeouts.forEach((timeout) => clearTimeout(timeout));
+        typingTimeouts.clear();
+        set({ selectedUser, typingUsers: new Set() });
+    },
 
     getAllContacts: async ()=>{
         set({isUsersLoading:true});
@@ -53,7 +80,7 @@ export const useChatStore = create((set,get)=>({
             const res = await axiosInstance.get("/messages/contacts");
             set({allContacts:res.data});
         } catch (error) {
-            toast.error(error.response.data.message);
+            toast.error(error.response?.data?.message || error.response?.data?.error || "Failed to load contacts");
         }finally{
             set({isUsersLoading:false});
         }
@@ -65,7 +92,7 @@ export const useChatStore = create((set,get)=>({
             const res = await axiosInstance.get("/messages/chats");
             set({chats:res.data});
         } catch (error) {
-            toast.error(error.response.data.message);
+            toast.error(error.response?.data?.message || error.response?.data?.error || "Failed to load chats");
         }finally{
             set({isUsersLoading:false});
         }
@@ -77,7 +104,7 @@ export const useChatStore = create((set,get)=>({
             const res = await axiosInstance.get(`/messages/${userId}`);
             set({messages:res.data, hasMoreMessages: res.data.length >= 50});
         } catch (error) {
-            toast.error(error.response?.data?.message || "Something went wrong");
+            toast.error(error.response?.data?.message || error.response?.data?.error || "Something went wrong");
         }finally{
             set({isMessagesLoading:false});
         }
@@ -98,7 +125,7 @@ export const useChatStore = create((set,get)=>({
             }));
         } catch (error) {
             set({ isLoadingMore: false });
-            toast.error(error.response?.data?.message || "Failed to load messages");
+            toast.error(error.response?.data?.message || error.response?.data?.error || "Failed to load messages");
         }
     },
 
@@ -128,19 +155,27 @@ export const useChatStore = create((set,get)=>({
                     msg._id === tempId ? savedMessage : msg
                 ),
             }));
+            // Update sidebar immediately with the new last message
+            get().getMyChatPartners();
         } catch (error) {
             // Remove failed optimistic message
             set((state) => ({
                 messages: state.messages.filter((msg) => msg._id !== tempId),
             }));
-            toast.error(error.response?.data?.message || "Failed to send message");
+            toast.error(error.response?.data?.message || error.response?.data?.error || "Failed to send message");
         }
     },
 
     addIncomingMessage: (message) => {
-        set((state) => ({
-            messages: [...state.messages, message],
-        }));
+        set((state) => {
+            // Avoid adding duplicate messages (e.g. from multi-tab socket broadcasts)
+            if (state.messages.some((m) => m._id === message._id)) {
+                return state;
+            }
+            return {
+                messages: [...state.messages, message],
+            };
+        });
     },
 
     updateMessageStatus: (messageId, status, timestamp) => {
@@ -151,10 +186,14 @@ export const useChatStore = create((set,get)=>({
         }));
     },
 
-    markAllReadFromSender: (senderId, readAt) => {
+    markAllReadFromSender: (readerId, readAt) => {
+        const { selectedUser } = get();
+        // Only mark messages as read if the reader is the currently selected user
+        if (!selectedUser || selectedUser._id !== readerId) return;
+
         set((state) => ({
             messages: state.messages.map((msg) =>
-                msg.senderId === senderId && msg.status !== "read"
+                msg.receiverId === readerId && msg.status !== "read"
                     ? { ...msg, status: "read", readAt }
                     : msg
             ),

@@ -53,14 +53,19 @@ function MessageInput() {
   };
 
   const handleTextChange = (e) => {
-    setText(e.target.value);
+    const val = e.target.value;
+    setText(val);
     if (isSoundEnabled) playRandomKeyStrokeSound();
 
-    emitTyping();
-
-    // Debounce: reset the stop-typing timer on every keystroke
-    clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(emitStopTyping, TYPING_STOP_DELAY);
+    if (val.trim() === "") {
+      clearTimeout(typingTimeoutRef.current);
+      emitStopTyping();
+    } else {
+      emitTyping();
+      // Debounce: reset the stop-typing timer on every keystroke
+      clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(emitStopTyping, TYPING_STOP_DELAY);
+    }
   };
 
   const handleSendMessage = (e) => {

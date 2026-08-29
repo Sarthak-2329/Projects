@@ -6,10 +6,16 @@ import User from "../models/User.js";
 export const getAllContacts = async (req, res) => {
   try {
     const loggedInUserId = req.user._id;
-    const filteredUsers = await User.find({ _id: { $ne: loggedInUserId } }).select("-password");
+    const filteredUsers = await User.find({
+      _id: { $ne: loggedInUserId },
+      isEmailVerified: true,
+    }).select("-password");
 
     res.status(200).json(filteredUsers);
   } catch (error) {
+    if (error.name === "CastError") {
+      return res.status(400).json({ message: "Invalid ID format" });
+    }
     console.log("Error in getAllContacts:", error);
     res.status(500).json({ message: "Server error" });
   }
@@ -41,8 +47,11 @@ export const getMessagesByUserId = async (req, res) => {
 
     res.status(200).json(messages.reverse());
   } catch (error) {
+    if (error.name === "CastError") {
+      return res.status(400).json({ message: "Invalid ID format" });
+    }
     console.log("Error in getMessages controller: ", error.message);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -86,10 +95,14 @@ export const sendMessage = async (req, res) => {
       newMessage.status = "delivered";
       newMessage.deliveredAt = new Date();
       await newMessage.save();
+    }
 
-      // Emit to receiver's user room (Redis adapter routes cross-instance)
+    // Emit to receiver's user room (Redis adapter routes cross-instance)
+    if (receiverOnline) {
       io.to(`user:${receiverId}`).emit("newMessage", newMessage);
     }
+    // Also emit to sender's user room for multi-device / multi-tab synchronization
+    io.to(`user:${senderId}`).emit("newMessage", newMessage);
 
     res.status(201).json({
       ack: true,
@@ -98,10 +111,13 @@ export const sendMessage = async (req, res) => {
   } catch (error) {
     if (error.name === "ValidationError") {
       const messages = Object.values(error.errors).map((val) => val.message);
-      return res.status(400).json({ error: messages.join(", ") });
+      return res.status(400).json({ message: messages.join(", ") });
+    }
+    if (error.name === "CastError") {
+      return res.status(400).json({ message: "Invalid ID format" });
     }
     console.log("Error in sendMessage controller: ", error.message);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -123,8 +139,11 @@ export const markMessagesAsRead = async (req, res) => {
 
     res.status(200).json({ success: true, readAt: now });
   } catch (error) {
+    if (error.name === "CastError") {
+      return res.status(400).json({ message: "Invalid ID format" });
+    }
     console.error("Error in markMessagesAsRead: ", error.message);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -191,7 +210,10 @@ export const getChatPartners = async (req, res) => {
 
     res.status(200).json(partners);
   } catch (error) {
+    if (error.name === "CastError") {
+      return res.status(400).json({ message: "Invalid ID format" });
+    }
     console.error("Error in getChatPartners: ", error.message);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ message: "Internal server error" });
   }
 };

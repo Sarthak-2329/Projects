@@ -172,10 +172,35 @@ void SocketEngine::handleIncomingConnection() {
 
 void SocketEngine::handleClientData(socket_t clientFd) {
     uint8_t buffer[BUFFER_SIZE];
-    int bytesRead = recv(clientFd, (char*)buffer, sizeof(buffer), 0);
+    bool clientDisconnected = false;
 
-    if (bytesRead <= 0) {
-        // Disconnected or socket error
+    while (true) {
+        int bytesRead = recv(clientFd, (char*)buffer, sizeof(buffer), 0);
+
+        if (bytesRead > 0) {
+            roomManager->updateHeartbeat(clientFd);
+            auto frames = roomManager->feedAndExtractFrames(clientFd, buffer, bytesRead);
+            for (const auto& payload : frames) {
+                processPacketPayload(clientFd, payload);
+            }
+        } else if (bytesRead == 0) {
+            // Connection gracefully closed by client
+            clientDisconnected = true;
+            break;
+        } else {
+#ifdef _WIN32
+            int err = WSAGetLastError();
+            if (err == WSAEWOULDBLOCK) break;
+#else
+            if (errno == EAGAIN || errno == EWOULDBLOCK) break;
+#endif
+            // Socket error / connection reset
+            clientDisconnected = true;
+            break;
+        }
+    }
+
+    if (clientDisconnected) {
         std::cout << "[SocketEngine]: Client disconnected (fd: " << clientFd << ")" << std::endl;
         roomManager->removeClient(clientFd);
 #if defined(__linux__)
@@ -185,16 +210,8 @@ void SocketEngine::handleClientData(socket_t clientFd) {
         return;
     }
 
-    roomManager->updateHeartbeat(clientFd);
-
-    // Thread-safe frame extraction directly on the stored session buffer
-    auto frames = roomManager->feedAndExtractFrames(clientFd, buffer, bytesRead);
-    for (const auto& payload : frames) {
-        processPacketPayload(clientFd, payload);
-    }
-
 #if defined(__linux__)
-    // Re-arm epoll ONESHOT flag
+    // Re-arm epoll ONESHOT flag after reading all available data
     struct epoll_event ev{};
     ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
     ev.data.fd = clientFd;

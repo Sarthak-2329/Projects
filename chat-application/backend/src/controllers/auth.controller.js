@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { sendPasswordResetEmail, sendVerificationEmail } from "../emails/emailHandlers.js";
+import { sendPasswordResetEmail, sendVerificationEmail, sendWelcomeEmail } from "../emails/emailHandlers.js";
 import { generateToken } from "../lib/utils.js";
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
@@ -17,14 +17,15 @@ export const signup = async (req, res) => {
     if (!fullName || !email || !password) {
       return res.status(400).json({ message: "All fields are required" });
     }
+    const normalizedEmail = email.toLowerCase().trim();
     if (password.length < 6) {
       return res.status(400).json({ message: "Password must be at least 6 characters" });
     }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(normalizedEmail)) {
       return res.status(400).json({ message: "Invalid email format" });
     }
-    const existing = await User.findOne({ email });
+    const existing = await User.findOne({ email: normalizedEmail });
     if (existing) {
       return res.status(400).json({ message: "An account with that email already exists" });
     }
@@ -37,8 +38,8 @@ export const signup = async (req, res) => {
     const hashedToken = crypto.createHash("sha256").update(rawToken).digest("hex");
 
     const newUser = new User({
-      fullName,
-      email,
+      fullName: fullName.trim(),
+      email: normalizedEmail,
       password: hashedPassword,
       isEmailVerified: false,
       emailVerifyToken: hashedToken,
@@ -64,6 +65,9 @@ export const signup = async (req, res) => {
       const messages = Object.values(error.errors).map((val) => val.message);
       return res.status(400).json({ message: messages.join(", ") });
     }
+    if (error.name === "CastError") {
+      return res.status(400).json({ message: "Invalid ID format" });
+    }
     console.error("Error in signup:", error);
     res.status(500).json({ message: "Internal server error" });
   }
@@ -78,7 +82,8 @@ export const login = async (req, res) => {
     return res.status(400).json({ message: "Email and password are required" });
   }
   try {
-    const user = await User.findOne({ email });
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
@@ -101,6 +106,9 @@ export const login = async (req, res) => {
       profilePic: user.profilePic,
     });
   } catch (error) {
+    if (error.name === "CastError") {
+      return res.status(400).json({ message: "Invalid ID format" });
+    }
     console.error("Error in login:", error);
     res.status(500).json({ message: "Internal server error" });
   }
@@ -109,7 +117,7 @@ export const login = async (req, res) => {
 // ---------------------------------------------------------------------------
 // Verify email — POST /api/auth/verify-email  body: { token }
 // Hashes the raw token, finds the matching user, marks them verified,
-// then issues a JWT so they are immediately logged in.
+// issues a JWT, and sends the welcome email.
 // ---------------------------------------------------------------------------
 export const verifyEmail = async (req, res) => {
   const { token } = req.body;
@@ -132,6 +140,13 @@ export const verifyEmail = async (req, res) => {
     user.emailVerifyExpires = undefined;
     await user.save();
 
+    // Send welcome email upon successful verification
+    try {
+      await sendWelcomeEmail(user.email, user.fullName, ENV.CLIENT_URL);
+    } catch (welcomeErr) {
+      console.error("Welcome email failed:", welcomeErr.message);
+    }
+
     generateToken(user._id, res);
     res.status(200).json({
       _id: user._id,
@@ -140,6 +155,9 @@ export const verifyEmail = async (req, res) => {
       profilePic: user.profilePic,
     });
   } catch (error) {
+    if (error.name === "CastError") {
+      return res.status(400).json({ message: "Invalid ID format" });
+    }
     console.error("Error in verifyEmail:", error);
     res.status(500).json({ message: "Internal server error" });
   }
@@ -155,7 +173,8 @@ export const resendVerification = async (req, res) => {
     if (!email) {
       return res.status(400).json({ message: "Email is required" });
     }
-    const user = await User.findOne({ email });
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       return res.status(200).json({
         message: "If that email is registered and unverified, a new link has been sent.",
@@ -184,6 +203,9 @@ export const resendVerification = async (req, res) => {
       message: "If that email is registered and unverified, a new link has been sent.",
     });
   } catch (error) {
+    if (error.name === "CastError") {
+      return res.status(400).json({ message: "Invalid ID format" });
+    }
     console.error("Error in resendVerification:", error);
     res.status(500).json({ message: "Internal server error" });
   }
@@ -216,6 +238,9 @@ export const updateProfile = async (req, res) => {
       const messages = Object.values(error.errors).map((val) => val.message);
       return res.status(400).json({ message: messages.join(", ") });
     }
+    if (error.name === "CastError") {
+      return res.status(400).json({ message: "Invalid ID format" });
+    }
     console.error("Error in updateProfile:", error);
     res.status(500).json({ message: "Internal server error" });
   }
@@ -230,7 +255,8 @@ export const forgotPassword = async (req, res) => {
     if (!email) {
       return res.status(400).json({ message: "Email is required" });
     }
-    const user = await User.findOne({ email });
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       return res.status(200).json({ message: "If that email is registered, a reset link has been sent." });
     }
@@ -252,6 +278,9 @@ export const forgotPassword = async (req, res) => {
     }
     res.status(200).json({ message: "If that email is registered, a reset link has been sent." });
   } catch (error) {
+    if (error.name === "CastError") {
+      return res.status(400).json({ message: "Invalid ID format" });
+    }
     console.error("Error in forgotPassword:", error);
     res.status(500).json({ message: "Internal server error" });
   }
@@ -283,6 +312,9 @@ export const resetPassword = async (req, res) => {
     await user.save();
     res.status(200).json({ message: "Password reset successful. You can now log in." });
   } catch (error) {
+    if (error.name === "CastError") {
+      return res.status(400).json({ message: "Invalid ID format" });
+    }
     console.error("Error in resetPassword:", error);
     res.status(500).json({ message: "Internal server error" });
   }

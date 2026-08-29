@@ -200,4 +200,21 @@ describe('POST /api/auth/login', () => {
       .send({ email: 'nobody@test.com', password: 'pass1234' });
     expect(res.status).toBe(400);
   });
+
+  it('logs in case-insensitively with mixed-case email', async () => {
+    // User was created with login@test.com in beforeEach
+    // Verify first
+    const { resendClient } = await import('../src/lib/resend.js');
+    const sendCallArgs = resendClient.emails.send.mock.calls.at(-1)[0];
+    const match = sendCallArgs.html.match(/verify-email\/([a-f0-9]{64})/);
+    const rawToken = match?.[1];
+    await request(app).post('/api/auth/verify-email').send({ token: rawToken });
+
+    const agent = request.agent(app);
+    const res = await agent
+      .post('/api/auth/login')
+      .send({ email: 'LOGIN@TEST.COM', password: 'pass1234' });
+    expect(res.status).toBe(200);
+    expect(res.body.email).toBe('login@test.com');
+  });
 });

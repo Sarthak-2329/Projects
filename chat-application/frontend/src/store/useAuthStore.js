@@ -199,6 +199,9 @@ export const useAuthStore = create((set,get)=>({
             const { selectedUser } = useChatStore.getState();
             if (selectedUser && newMessage.senderId === selectedUser._id) {
                 useChatStore.getState().addIncomingMessage(newMessage);
+            } else if (selectedUser && newMessage.receiverId === selectedUser._id && newMessage.senderId === authUser._id) {
+                // Incoming message from another tab/device of the same logged-in user
+                useChatStore.getState().addIncomingMessage(newMessage);
             } else {
                 set((state) => ({
                     unreadMessages: {
@@ -206,11 +209,13 @@ export const useAuthStore = create((set,get)=>({
                         [newMessage.senderId]: (state.unreadMessages[newMessage.senderId] || 0) + 1,
                     },
                 }));
-                useChatStore.getState().getMyChatPartners();
             }
 
+            // Always update sidebar preview and order in real time
+            useChatStore.getState().getMyChatPartners();
+
             const { isSoundEnabled } = useChatStore.getState();
-            if (isSoundEnabled) {
+            if (isSoundEnabled && newMessage.senderId !== authUser._id) {
                 const notificationSound = new Audio("/sounds/notification.mp3");
                 notificationSound.currentTime = 0;
                 notificationSound.play().catch((e) => console.log("Audio play error:", e));
@@ -222,10 +227,7 @@ export const useAuthStore = create((set,get)=>({
         });
 
         socket.on("messagesMarkedRead", ({ readBy, readAt }) => {
-            const { authUser } = get();
-            if (authUser) {
-                useChatStore.getState().markAllReadFromSender(authUser._id, readAt);
-            }
+            useChatStore.getState().markAllReadFromSender(readBy, readAt);
         });
 
         socket.on("typing",     ({ senderId }) => useChatStore.getState().setUserTyping(senderId));

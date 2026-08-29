@@ -62,7 +62,13 @@ void RoomManager::joinRoom(int socketFd, const std::string& roomId) {
     if (it != sessions.end()) {
         // Remove from old room if present
         if (!it->second.roomId.empty()) {
-            roomToSockets[it->second.roomId].erase(socketFd);
+            auto rIt = roomToSockets.find(it->second.roomId);
+            if (rIt != roomToSockets.end()) {
+                rIt->second.erase(socketFd);
+                if (rIt->second.empty()) {
+                    roomToSockets.erase(rIt);
+                }
+            }
         }
         it->second.roomId = roomId;
         roomToSockets[roomId].insert(socketFd);

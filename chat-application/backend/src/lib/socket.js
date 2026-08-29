@@ -169,26 +169,6 @@ io.on("connection", async (socket) => {
   // 1. Join user room for targeted socket events
   socket.join(`user:${userId}`);
 
-  // 2. Event: Recipient acknowledges delivery receipt
-  socket.on("messageDelivered", async ({ messageId, senderId }) => {
-    try {
-      const updatedMessage = await Message.findOneAndUpdate(
-        { _id: messageId, status: { $ne: "read" } },
-        { status: "delivered", deliveredAt: new Date() },
-        { new: true }
-      );
-      if (updatedMessage) {
-        io.to(`user:${senderId}`).emit("messageStatusUpdated", {
-          messageId: updatedMessage._id,
-          status: "delivered",
-          deliveredAt: updatedMessage.deliveredAt,
-        });
-      }
-    } catch (err) {
-      console.error("Error updating message delivery status:", err.message);
-    }
-  });
-
   // 3. Event: Recipient opens chat window (Read Receipt)
   socket.on("messageRead", async ({ senderId }) => {
     try {
