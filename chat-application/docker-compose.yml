@@ -79,6 +79,7 @@ services:
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
       ARCJET_KEY: ${ARCJET_KEY}
       ARCJET_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
 
   # ---------------------------------------------------------------------------
   # Frontend  (nginx serving Vite build, proxies /api + /socket.io to backend)

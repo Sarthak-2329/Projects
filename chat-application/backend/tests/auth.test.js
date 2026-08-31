@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
-import mongoose from 'mongoose';
 
 // ---------------------------------------------------------------------------
 // Mock external services BEFORE any module that imports them is loaded.
@@ -52,20 +51,6 @@ async function signUpAndGetToken(userData = {}) {
   const rawToken = match?.[1] ?? null;
 
   return { ...data, rawToken };
-}
-
-// ---------------------------------------------------------------------------
-// Helper: full journey — sign up, verify email, log in, return supertest agent
-// with the jwt cookie already set.
-// ---------------------------------------------------------------------------
-async function createVerifiedSession(agent, userData = {}) {
-  const { rawToken, email, password } = await signUpAndGetToken(userData);
-
-  // Verify email
-  const verifyRes = await agent.post('/api/auth/verify-email').send({ token: rawToken });
-  expect(verifyRes.status).toBe(200);
-
-  return verifyRes.body; // user object
 }
 
 // ---------------------------------------------------------------------------

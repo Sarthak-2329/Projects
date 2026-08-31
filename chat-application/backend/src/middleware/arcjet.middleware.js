@@ -1,5 +1,6 @@
 import aj from "../lib/arcjet.js";
 import { isSpoofedBot } from "@arcjet/inspect";
+import { logger } from "../lib/logger.js";
 
 export const arcjetProtection = async (req, res, next) => {
   try {
@@ -18,14 +19,14 @@ export const arcjetProtection = async (req, res, next) => {
       }
     }
     if (decision.results.some(isSpoofedBot)) {
-        return res.status(403).json({
-            error:"Spoofed bot detected",
-            message:"Malicious bot activity detected",
-        });
+      return res.status(403).json({
+        error: "Spoofed bot detected",
+        message: "Malicious bot activity detected",
+      });
     }
     next();
   } catch (error) {
-    console.log("ArcJet Protection Error: ", error);
+    logger.error({ error: error.message }, "ArcJet Protection Error");
     next();
   }
 };

@@ -5,6 +5,7 @@ import express from 'express';
 import { connectDB } from './lib/db.js';
 import { ENV } from './lib/env.js';
 import { app, server } from './lib/createApp.js';
+import { logger } from './lib/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -45,10 +46,10 @@ async function startServer() {
   try {
     await connectDB();
     server.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
+      logger.info({ port: PORT }, `Server is running on port ${PORT}`);
     });
   } catch (error) {
-    console.error('Unable to start server:', error);
+    logger.error({ error: error.message }, 'Unable to start server');
     process.exit(1);
   }
 }

@@ -4,6 +4,7 @@ import { generateToken } from "../lib/utils.js";
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import { ENV } from "../lib/env.js";
+import { logger } from "../lib/logger.js";
 import cloudinary from "../lib/cloudinary.js";
 
 // ---------------------------------------------------------------------------
@@ -52,7 +53,7 @@ export const signup = async (req, res) => {
       await sendVerificationEmail(newUser.email, newUser.fullName, verifyLink);
     } catch (emailError) {
       // Don't abort signup if email fails — user can request a resend
-      console.error("Verification email failed:", emailError.message);
+      logger.error({ error: emailError.message, email: newUser.email }, "Verification email failed");
     }
 
     res.status(201).json({
@@ -68,7 +69,7 @@ export const signup = async (req, res) => {
     if (error.name === "CastError") {
       return res.status(400).json({ message: "Invalid ID format" });
     }
-    console.error("Error in signup:", error);
+    logger.error({ error: error.message }, "Error in signup");
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -109,7 +110,7 @@ export const login = async (req, res) => {
     if (error.name === "CastError") {
       return res.status(400).json({ message: "Invalid ID format" });
     }
-    console.error("Error in login:", error);
+    logger.error({ error: error.message }, "Error in login");
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -144,7 +145,7 @@ export const verifyEmail = async (req, res) => {
     try {
       await sendWelcomeEmail(user.email, user.fullName, ENV.CLIENT_URL);
     } catch (welcomeErr) {
-      console.error("Welcome email failed:", welcomeErr.message);
+      logger.error({ error: welcomeErr.message, email: user.email }, "Welcome email failed");
     }
 
     generateToken(user._id, res);
@@ -158,7 +159,7 @@ export const verifyEmail = async (req, res) => {
     if (error.name === "CastError") {
       return res.status(400).json({ message: "Invalid ID format" });
     }
-    console.error("Error in verifyEmail:", error);
+    logger.error({ error: error.message }, "Error in verifyEmail");
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -195,7 +196,7 @@ export const resendVerification = async (req, res) => {
     try {
       await sendVerificationEmail(user.email, user.fullName, verifyLink);
     } catch (emailError) {
-      console.error("Resend verification email failed:", emailError.message);
+      logger.error({ error: emailError.message, email: user.email }, "Resend verification email failed");
       return res.status(500).json({ message: "Failed to send email. Please try again later." });
     }
 
@@ -206,7 +207,7 @@ export const resendVerification = async (req, res) => {
     if (error.name === "CastError") {
       return res.status(400).json({ message: "Invalid ID format" });
     }
-    console.error("Error in resendVerification:", error);
+    logger.error({ error: error.message }, "Error in resendVerification");
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -246,7 +247,7 @@ export const updateProfile = async (req, res) => {
     if (error.name === "CastError") {
       return res.status(400).json({ message: "Invalid ID format" });
     }
-    console.error("Error in updateProfile:", error);
+    logger.error({ error: error.message }, "Error in updateProfile");
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -278,7 +279,7 @@ export const forgotPassword = async (req, res) => {
       user.passwordResetToken = undefined;
       user.passwordResetExpires = undefined;
       await user.save();
-      console.error("Reset email failed:", emailError.message);
+      logger.error({ error: emailError.message, email: user.email }, "Reset email failed");
       return res.status(500).json({ message: "Failed to send reset email. Please try again." });
     }
     res.status(200).json({ message: "If that email is registered, a reset link has been sent." });
@@ -286,7 +287,7 @@ export const forgotPassword = async (req, res) => {
     if (error.name === "CastError") {
       return res.status(400).json({ message: "Invalid ID format" });
     }
-    console.error("Error in forgotPassword:", error);
+    logger.error({ error: error.message }, "Error in forgotPassword");
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -320,7 +321,7 @@ export const resetPassword = async (req, res) => {
     if (error.name === "CastError") {
       return res.status(400).json({ message: "Invalid ID format" });
     }
-    console.error("Error in resetPassword:", error);
+    logger.error({ error: error.message }, "Error in resetPassword");
     res.status(500).json({ message: "Internal server error" });
   }
 };

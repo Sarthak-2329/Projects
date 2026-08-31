@@ -1,5 +1,7 @@
 import cloudinary from "../lib/cloudinary.js";
 import { isUserOnline, io } from "../lib/socket.js";
+import { logger } from "../lib/logger.js";
+import { messagesSentCounter } from "../lib/metrics.js";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
 
@@ -16,7 +18,7 @@ export const getAllContacts = async (req, res) => {
     if (error.name === "CastError") {
       return res.status(400).json({ message: "Invalid ID format" });
     }
-    console.log("Error in getAllContacts:", error);
+    logger.error({ error: error.message }, "Error in getAllContacts");
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -60,7 +62,7 @@ export const getMessagesByUserId = async (req, res) => {
     if (error.name === "CastError") {
       return res.status(400).json({ message: "Invalid ID format" });
     }
-    console.log("Error in getMessages controller: ", error.message);
+    logger.error({ error: error.message }, "Error in getMessages controller");
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -102,6 +104,7 @@ export const sendMessage = async (req, res) => {
     });
 
     await newMessage.save();
+    messagesSentCounter.inc();
 
     // Check if receiver is online (across all instances via Redis when available)
     const receiverOnline = await isUserOnline(receiverId);
@@ -130,7 +133,7 @@ export const sendMessage = async (req, res) => {
     if (error.name === "CastError") {
       return res.status(400).json({ message: "Invalid ID format" });
     }
-    console.log("Error in sendMessage controller: ", error.message);
+    logger.error({ error: error.message }, "Error in sendMessage controller");
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -156,7 +159,7 @@ export const markMessagesAsRead = async (req, res) => {
     if (error.name === "CastError") {
       return res.status(400).json({ message: "Invalid ID format" });
     }
-    console.error("Error in markMessagesAsRead: ", error.message);
+    logger.error({ error: error.message }, "Error in markMessagesAsRead");
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -227,7 +230,7 @@ export const getChatPartners = async (req, res) => {
     if (error.name === "CastError") {
       return res.status(400).json({ message: "Invalid ID format" });
     }
-    console.error("Error in getChatPartners: ", error.message);
+    logger.error({ error: error.message }, "Error in getChatPartners");
     res.status(500).json({ message: "Internal server error" });
   }
 };

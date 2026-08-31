@@ -2,6 +2,8 @@ import { Server } from "socket.io";
 import http from "http";
 import express from "express";
 import { ENV } from "./env.js";
+import { logger } from "./logger.js";
+import { socketConnectionsActive } from "./metrics.js";
 import { socketAuthMiddleware } from "../middleware/socket.auth.middleware.js";
 import Message from "../models/Message.js";
 
@@ -29,13 +31,28 @@ if (ENV.REDIS_URL) {
     const subClient = pubClient.duplicate();
 
     io.adapter(createAdapter(pubClient, subClient));
-    console.log("--> Socket.io Redis Adapter successfully connected for multi-node horizontal scaling.");
+    logger.info("Socket.io Redis Adapter successfully connected for multi-node horizontal scaling.");
 
     // Reuse pubClient for presence commands (avoids a third connection)
     redisClient = pubClient;
-    console.log("--> Redis presence tracking enabled.");
+    logger.info("Redis presence tracking enabled.");
   } catch (err) {
-    console.warn("--> Redis adapter setup skipped or failed, running in single-instance mode:", err.message);
+    logger.warn({ error: err.message }, "Redis adapter setup skipped or failed, running in single-instance mode");
+  }
+}
+
+export async function getRedisHealth() {
+  if (!ENV.REDIS_URL) {
+    return { status: "disabled" };
+  }
+  if (!redisClient) {
+    return { status: "error", message: "Redis client not initialized" };
+  }
+  try {
+    const pong = await redisClient.ping();
+    return { status: pong === "PONG" ? "connected" : "error" };
+  } catch (err) {
+    return { status: "error", message: err.message };
   }
 }
 
@@ -113,7 +130,7 @@ export async function isUserOnline(userId) {
       const userKey = `${PRESENCE_KEY_PREFIX}${userId}`;
       return await redisClient.scard(userKey) > 0;
     } catch (err) {
-      console.warn("Redis presence lookup failed; using local presence:", err.message);
+      logger.warn({ error: err.message }, "Redis presence lookup failed; using local presence");
     }
   }
   const sockets = userSocketMap[userId];
@@ -143,7 +160,7 @@ export async function getOnlineUserIds() {
       )));
       return onlineChecks.filter(({ online }) => online).map(({ userId }) => userId);
     } catch (err) {
-      console.warn("Redis online-user lookup failed; using local presence:", err.message);
+      logger.warn({ error: err.message }, "Redis online-user lookup failed; using local presence");
     }
   }
   return Object.keys(userSocketMap).filter((id) => userSocketMap[id].size > 0);
@@ -177,7 +194,7 @@ async function broadcastOnlineUsers() {
     const onlineUsers = await getOnlineUserIds();
     io.emit("getOnlineUsers", onlineUsers);
   } catch (err) {
-    console.error("Error broadcasting online users:", err.message);
+    logger.error({ error: err.message }, "Error broadcasting online users");
   }
 }
 
@@ -195,7 +212,7 @@ async function refreshLocalPresence() {
     pipeline.expire(ALL_USERS_KEY, PRESENCE_TTL_SECONDS);
     await pipeline.exec();
   } catch (err) {
-    console.warn("Redis presence refresh failed:", err.message);
+    logger.warn({ error: err.message }, "Redis presence refresh failed");
   }
 }
 
@@ -226,7 +243,8 @@ async function markPendingMessagesDelivered(receiverId) {
 // ---------------------------------------------------------------------------
 io.on("connection", async (socket) => {
   const userId = socket.userId;
-  console.log(`User connected: ${socket.user.fullName} (${userId}) [Socket: ${socket.id}]`);
+  socketConnectionsActive.inc();
+  logger.info({ userId, fullName: socket.user.fullName, socketId: socket.id }, "User connected via socket");
 
   // Join before announcing presence. This closes the race where a sender sees
   // the recipient as online but its event is emitted before this socket joins.
@@ -243,7 +261,7 @@ io.on("connection", async (socket) => {
     await markPendingMessagesDelivered(userId);
     await broadcastOnlineUsers();
   } catch (err) {
-    console.error("Error finalizing socket connection:", err.message);
+    logger.error({ error: err.message }, "Error finalizing socket connection");
   }
 
   // 3. Event: Recipient opens chat window (Read Receipt)
@@ -262,7 +280,7 @@ io.on("connection", async (socket) => {
         });
       }
     } catch (err) {
-      console.error("Error updating message read status:", err.message);
+      logger.error({ error: err.message }, "Error updating message read status");
     }
   });
 
@@ -272,7 +290,8 @@ io.on("connection", async (socket) => {
 
   // Disconnect handler
   socket.on("disconnect", async () => {
-    console.log(`User disconnected: ${socket.user.fullName} [Socket: ${socket.id}]`);
+    socketConnectionsActive.dec();
+    logger.info({ userId, fullName: socket.user?.fullName, socketId: socket.id }, "User disconnected from socket");
 
     // Remove from local map
     if (userSocketMap[userId]) {
@@ -287,9 +306,9 @@ io.on("connection", async (socket) => {
       await removePresence(userId, socket.id);
       await broadcastOnlineUsers();
     } catch (err) {
-      console.error("Error finalizing socket disconnect:", err.message);
+      logger.error({ error: err.message }, "Error finalizing socket disconnect");
     }
   });
 });
 
-export { io, app, server };
+export { io, app, server, redisClient };

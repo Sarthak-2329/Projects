@@ -1,2 +1,5 @@
 node_modules
 .env
+dist
+backend/loadtest/bin
+backend/loadtest/summary_*.json
