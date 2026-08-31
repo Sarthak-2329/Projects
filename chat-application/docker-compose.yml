@@ -17,7 +17,6 @@
 #   redis     – Redis 7                   (internal only)
 #   backend   – Node/Express/Socket.io    → localhost:3000
 #   frontend  – nginx serving React SPA   → localhost:80
-#   cpp_core  – Standalone C++ TCP engine → localhost:8080
 # =============================================================================
 
 services:
@@ -54,7 +53,6 @@ services:
 
   # ---------------------------------------------------------------------------
   # Backend  (Node / Express / Socket.io)
-  # Build context is the repo root so the "file:.." local dep resolves.
   # ---------------------------------------------------------------------------
   backend:
     build: ./backend
@@ -92,15 +90,6 @@ services:
       - "80:80"
     depends_on:
       - backend
-
-  # ---------------------------------------------------------------------------
-  # C++ TCP engine  (standalone systems demo — see README for protocol docs)
-  # ---------------------------------------------------------------------------
-  cpp_core:
-    build: ./cpp_core
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
 
 # ---------------------------------------------------------------------------
 # Named volumes
