@@ -16,6 +16,7 @@ const userSchema = new mongoose.Schema({
         type:String,
         required:true,
         minlength:6,
+        select:false,
     },
     profilePic:{
         type:String,
@@ -23,9 +24,11 @@ const userSchema = new mongoose.Schema({
     },
     passwordResetToken:{
         type:String,
+        select:false,
     },
     passwordResetExpires:{
         type:Date,
+        select:false,
     },
     isEmailVerified:{
         type:Boolean,
@@ -33,9 +36,11 @@ const userSchema = new mongoose.Schema({
     },
     emailVerifyToken:{
         type:String,
+        select:false,
     },
     emailVerifyExpires:{
         type:Date,
+        select:false,
     },
 },{timestamps:true});
 

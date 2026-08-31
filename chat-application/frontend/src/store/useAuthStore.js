@@ -182,7 +182,9 @@ export const useAuthStore = create((set,get)=>({
     // -------------------------------------------------------------------------
     connectSocket: ()=>{
         const {authUser} = get();
-        if(!authUser || get().socket?.connected) return;
+        // A socket that is still connecting is already usable and will reconnect
+        // itself. Creating a second one here duplicates every event listener.
+        if(!authUser || get().socket) return;
 
         const socket = io(BASE_URL, {
             withCredentials: true,
@@ -197,16 +199,23 @@ export const useAuthStore = create((set,get)=>({
 
         socket.on("newMessage", (newMessage) => {
             const { selectedUser } = useChatStore.getState();
-            if (selectedUser && newMessage.senderId === selectedUser._id) {
+            const senderId = newMessage.senderId?.toString();
+            const receiverId = newMessage.receiverId?.toString();
+            const selectedUserId = selectedUser?._id?.toString();
+            const authUserId = authUser._id?.toString();
+
+            if (selectedUserId && senderId === selectedUserId) {
                 useChatStore.getState().addIncomingMessage(newMessage);
-            } else if (selectedUser && newMessage.receiverId === selectedUser._id && newMessage.senderId === authUser._id) {
+            } else if (selectedUserId && receiverId === selectedUserId && senderId === authUserId) {
                 // Incoming message from another tab/device of the same logged-in user
                 useChatStore.getState().addIncomingMessage(newMessage);
-            } else {
+            } else if (senderId !== authUserId) {
+                // Never create an unread badge for this account when another one
+                // of its tabs/devices sends a message.
                 set((state) => ({
                     unreadMessages: {
                         ...state.unreadMessages,
-                        [newMessage.senderId]: (state.unreadMessages[newMessage.senderId] || 0) + 1,
+                        [senderId]: (state.unreadMessages[senderId] || 0) + 1,
                     },
                 }));
             }
@@ -235,7 +244,7 @@ export const useAuthStore = create((set,get)=>({
     },
 
     disconnectSocket: ()=>{
-        if(get().socket?.connected) get().socket.disconnect();
+        get().socket?.disconnect();
         set({socket:null,onlineUsers:[]});
     },
 }));

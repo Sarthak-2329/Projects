@@ -37,7 +37,7 @@ The repository also contains a standalone **C++ TCP chat engine** (`/cpp_core`) 
 A separate, self-contained TCP chat server built from scratch to demonstrate low-level systems programming concepts. It is **not integrated** with the web application above — it runs independently with its own protocol and in-memory state.
 
 - **Event-Driven I/O Multiplexing**: Non-blocking edge-triggered `epoll` (Linux) with `select`/`WSAPoll` fallback (Windows).
-- **Fixed-Size Thread Pool**: Task queue driven by `std::thread`, `std::mutex`, and `std::condition_variable`.
+- **Buffered Non-Blocking Writes**: Per-socket outbound queues with `EPOLLOUT` handling prevent slow clients from corrupting or dropping frames.
 - **Custom TCP Packet Framing**: 4-byte big-endian length-prefix protocol with thread-safe buffer accumulation to handle partial reads and TCP coalescing.
 - **Heartbeat & Cleanup**: 15s ping / 30s timeout sweep to purge dead connections; graceful `SIGINT`/`SIGTERM` shutdown.
 
@@ -74,7 +74,7 @@ A separate, self-contained TCP chat server built from scratch to demonstrate low
 ```text
                           +---------------------------------------+
                           |       C++ TCP Chat Server (:8080)     |
-                          | (epoll, Thread Pool, Binary Framing,  |
+                          | (epoll, Buffered Writes, Binary Framing,|
                           |  In-Memory RoomManager, Heartbeats)   |
                           +---------------------------------------+
                                        ^

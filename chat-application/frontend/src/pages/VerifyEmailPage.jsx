@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuthStore } from "../store/useAuthStore";
 import AuthBackground from "../components/AuthBackground";
@@ -16,27 +16,40 @@ import AuthBackground from "../components/AuthBackground";
 function VerifyEmailPage() {
   const { token } = useParams();
   const navigate = useNavigate();
-  const { verifyEmail, isVerifyingEmail, resendVerification, isResendingVerification } = useAuthStore();
+  const { verifyEmail, resendVerification, isResendingVerification } = useAuthStore();
 
   const [status, setStatus] = useState("verifying"); // "verifying" | "success" | "error"
   const [resendEmail, setResendEmail] = useState("");
+  const attemptedTokenRef = useRef(null);
+  const redirectTimerRef = useRef(null);
 
   useEffect(() => {
     if (!token) {
       setStatus("error");
       return;
     }
+
+    // React Strict Mode replays effects in development. A verification token is
+    // single-use, so issuing two requests would make the second request report
+    // a false "expired" error.
+    if (attemptedTokenRef.current === token) {
+      return () => clearTimeout(redirectTimerRef.current);
+    }
+    attemptedTokenRef.current = token;
+
     verifyEmail(token).then((ok) => {
+      if (attemptedTokenRef.current !== token) return;
       if (ok) {
         setStatus("success");
         // Brief delay so the user sees the success message before redirect
-        setTimeout(() => navigate("/"), 1500);
+        redirectTimerRef.current = setTimeout(() => navigate("/"), 1500);
       } else {
         setStatus("error");
       }
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+
+    return () => clearTimeout(redirectTimerRef.current);
+  }, [navigate, token, verifyEmail]);
 
   return (
     <AuthBackground>

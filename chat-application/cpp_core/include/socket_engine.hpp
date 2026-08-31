@@ -8,6 +8,7 @@
 #include <atomic>
 #include <memory>
 #include <chrono>
+#include <unordered_map>
 
 #ifdef _WIN32
   #include <winsock2.h>
@@ -33,16 +34,15 @@
   #define CLOSESOCKET(s) close(s)
 #endif
 
-#include "thread_pool.hpp"
 #include "room_manager.hpp"
 
 /**
  * @brief High-concurrency C++ TCP Socket Engine supporting epoll I/O multiplexing
- * with custom 4-byte prefix packet framing and thread pool job distribution.
+ * with custom 4-byte prefix packet framing and buffered non-blocking writes.
  */
 class SocketEngine {
 public:
-    SocketEngine(int port, size_t threadPoolSize = 4);
+    explicit SocketEngine(int port);
     ~SocketEngine();
 
     // Start network engine & event loop
@@ -62,8 +62,8 @@ private:
     socket_t listenFd;
     std::atomic<bool> isRunning;
     
-    std::unique_ptr<ThreadPool> threadPool;
     std::unique_ptr<RoomManager> roomManager;
+    std::unordered_map<socket_t, std::vector<uint8_t>> pendingWrites;
 
     // Epoll handle (Linux) or Polling loop (Cross-platform)
     int epollFd;
@@ -76,7 +76,9 @@ private:
     void handleIncomingConnection();
     void handleClientData(socket_t clientFd);
     void processPacketPayload(socket_t clientFd, const std::string& payload);
-    void heartbeatRoutine();
+    bool flushPendingWrites(socket_t clientFd);
+    void updateClientEvents(socket_t clientFd);
+    void closeClient(socket_t clientFd);
 };
 
 #endif // SOCKET_ENGINE_HPP

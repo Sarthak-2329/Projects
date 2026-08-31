@@ -54,6 +54,13 @@ io.use(socketAuthMiddleware);
 // ---------------------------------------------------------------------------
 const PRESENCE_KEY_PREFIX = "presence:";
 const ALL_USERS_KEY = "presence:all_users";
+const PRESENCE_TTL_SECONDS = 60;
+const removeStalePresenceScript = `
+  if redis.call('SCARD', KEYS[1]) == 0 then
+    return redis.call('SREM', KEYS[2], ARGV[1])
+  end
+  return 0
+`;
 
 // In-memory fallback (used when REDIS_URL is unset)
 const userSocketMap = {}; // { userId: Set<socketId> }
@@ -63,8 +70,13 @@ const userSocketMap = {}; // { userId: Set<socketId> }
 async function addPresence(userId, socketId) {
   if (redisClient) {
     const userKey = `${PRESENCE_KEY_PREFIX}${userId}`;
-    await redisClient.sadd(userKey, socketId);
-    await redisClient.sadd(ALL_USERS_KEY, userId);
+    await redisClient
+      .multi()
+      .sadd(userKey, socketId)
+      .expire(userKey, PRESENCE_TTL_SECONDS)
+      .sadd(ALL_USERS_KEY, userId)
+      .expire(ALL_USERS_KEY, PRESENCE_TTL_SECONDS)
+      .exec();
   } else {
     if (!userSocketMap[userId]) {
       userSocketMap[userId] = new Set();
@@ -77,11 +89,9 @@ async function removePresence(userId, socketId) {
   if (redisClient) {
     const userKey = `${PRESENCE_KEY_PREFIX}${userId}`;
     await redisClient.srem(userKey, socketId);
-    const remaining = await redisClient.scard(userKey);
-    if (remaining === 0) {
-      await redisClient.srem(ALL_USERS_KEY, userId);
-      await redisClient.del(userKey);
-    }
+    // Remove the user from the aggregate set only if another process has not
+    // added a new socket in the meantime.
+    await redisClient.eval(removeStalePresenceScript, 2, userKey, ALL_USERS_KEY, userId.toString());
   } else {
     if (userSocketMap[userId]) {
       userSocketMap[userId].delete(socketId);
@@ -99,7 +109,12 @@ async function removePresence(userId, socketId) {
  */
 export async function isUserOnline(userId) {
   if (redisClient) {
-    return await redisClient.sismember(ALL_USERS_KEY, userId.toString()) === 1;
+    try {
+      const userKey = `${PRESENCE_KEY_PREFIX}${userId}`;
+      return await redisClient.scard(userKey) > 0;
+    } catch (err) {
+      console.warn("Redis presence lookup failed; using local presence:", err.message);
+    }
   }
   const sockets = userSocketMap[userId];
   return !!(sockets && sockets.size > 0);
@@ -110,7 +125,26 @@ export async function isUserOnline(userId) {
  */
 export async function getOnlineUserIds() {
   if (redisClient) {
-    return await redisClient.smembers(ALL_USERS_KEY);
+    try {
+      const userIds = await redisClient.smembers(ALL_USERS_KEY);
+      const onlineChecks = await Promise.all(
+        userIds.map(async (userId) => ({
+          userId,
+          online: await redisClient.scard(`${PRESENCE_KEY_PREFIX}${userId}`) > 0,
+        }))
+      );
+      const staleUserIds = onlineChecks.filter(({ online }) => !online).map(({ userId }) => userId);
+      await Promise.all(staleUserIds.map((userId) => redisClient.eval(
+        removeStalePresenceScript,
+        2,
+        `${PRESENCE_KEY_PREFIX}${userId}`,
+        ALL_USERS_KEY,
+        userId
+      )));
+      return onlineChecks.filter(({ online }) => online).map(({ userId }) => userId);
+    } catch (err) {
+      console.warn("Redis online-user lookup failed; using local presence:", err.message);
+    }
   }
   return Object.keys(userSocketMap).filter((id) => userSocketMap[id].size > 0);
 }
@@ -147,6 +181,46 @@ async function broadcastOnlineUsers() {
   }
 }
 
+async function refreshLocalPresence() {
+  if (!redisClient) return;
+
+  try {
+    const pipeline = redisClient.multi();
+    for (const [userId, sockets] of Object.entries(userSocketMap)) {
+      if (sockets.size === 0) continue;
+      const userKey = `${PRESENCE_KEY_PREFIX}${userId}`;
+      pipeline.expire(userKey, PRESENCE_TTL_SECONDS);
+      pipeline.sadd(ALL_USERS_KEY, userId);
+    }
+    pipeline.expire(ALL_USERS_KEY, PRESENCE_TTL_SECONDS);
+    await pipeline.exec();
+  } catch (err) {
+    console.warn("Redis presence refresh failed:", err.message);
+  }
+}
+
+const presenceRefreshTimer = setInterval(refreshLocalPresence, (PRESENCE_TTL_SECONDS * 1000) / 2);
+presenceRefreshTimer.unref();
+
+async function markPendingMessagesDelivered(receiverId) {
+  const pendingMessages = await Message.find({ receiverId, status: "sent" }).select("_id senderId");
+  if (pendingMessages.length === 0) return;
+
+  const deliveredAt = new Date();
+  await Message.updateMany(
+    { _id: { $in: pendingMessages.map((message) => message._id) }, status: "sent" },
+    { $set: { status: "delivered", deliveredAt } }
+  );
+
+  for (const message of pendingMessages) {
+    io.to(`user:${message.senderId}`).emit("messageStatusUpdated", {
+      messageId: message._id.toString(),
+      status: "delivered",
+      deliveredAt,
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Connection handler
 // ---------------------------------------------------------------------------
@@ -154,20 +228,23 @@ io.on("connection", async (socket) => {
   const userId = socket.userId;
   console.log(`User connected: ${socket.user.fullName} (${userId}) [Socket: ${socket.id}]`);
 
+  // Join before announcing presence. This closes the race where a sender sees
+  // the recipient as online but its event is emitted before this socket joins.
+  socket.join(`user:${userId}`);
+
   // Always track locally (needed for local getUserSocketIds fallback)
   if (!userSocketMap[userId]) {
     userSocketMap[userId] = new Set();
   }
   userSocketMap[userId].add(socket.id);
 
-  // Track in Redis (if available)
-  await addPresence(userId, socket.id);
-
-  // Broadcast online users status (reads from Redis when available)
-  await broadcastOnlineUsers();
-
-  // 1. Join user room for targeted socket events
-  socket.join(`user:${userId}`);
+  try {
+    await addPresence(userId, socket.id);
+    await markPendingMessagesDelivered(userId);
+    await broadcastOnlineUsers();
+  } catch (err) {
+    console.error("Error finalizing socket connection:", err.message);
+  }
 
   // 3. Event: Recipient opens chat window (Read Receipt)
   socket.on("messageRead", async ({ senderId }) => {
@@ -206,9 +283,12 @@ io.on("connection", async (socket) => {
     }
 
     // Remove from Redis (if available)
-    await removePresence(userId, socket.id);
-
-    await broadcastOnlineUsers();
+    try {
+      await removePresence(userId, socket.id);
+      await broadcastOnlineUsers();
+    } catch (err) {
+      console.error("Error finalizing socket disconnect:", err.message);
+    }
   });
 });
 

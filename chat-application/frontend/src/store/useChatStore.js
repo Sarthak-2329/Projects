@@ -5,6 +5,7 @@ import { useAuthStore } from './useAuthStore';
 
 // Map of typing timeouts per user to guarantee cleanup on unexpected disconnect
 const typingTimeouts = new Map();
+let historyRequestId = 0;
 
 export const useChatStore = create((set,get)=>({
     allContacts:[],
@@ -71,7 +72,15 @@ export const useChatStore = create((set,get)=>({
         // Clean up all typing timeouts
         typingTimeouts.forEach((timeout) => clearTimeout(timeout));
         typingTimeouts.clear();
-        set({ selectedUser, typingUsers: new Set() });
+        // Clear the old timeline immediately. Without this, a slow request for a
+        // previous conversation can leave its messages visible in the new one.
+        set({
+            selectedUser,
+            typingUsers: new Set(),
+            messages: [],
+            hasMoreMessages: true,
+            isLoadingMore: false,
+        });
     },
 
     getAllContacts: async ()=>{
@@ -99,14 +108,19 @@ export const useChatStore = create((set,get)=>({
     },
 
     getMessagesByUserId: async (userId)=>{
+        const requestId = ++historyRequestId;
         set({isMessagesLoading:true});
         try {
             const res = await axiosInstance.get(`/messages/${userId}`);
-            set({messages:res.data, hasMoreMessages: res.data.length >= 50});
+            if (requestId === historyRequestId) {
+                set({messages:res.data, hasMoreMessages: res.data.length >= 50});
+            }
         } catch (error) {
-            toast.error(error.response?.data?.message || error.response?.data?.error || "Something went wrong");
+            if (requestId === historyRequestId) {
+                toast.error(error.response?.data?.message || error.response?.data?.error || "Something went wrong");
+            }
         }finally{
-            set({isMessagesLoading:false});
+            if (requestId === historyRequestId) set({isMessagesLoading:false});
         }
     },
 
@@ -119,9 +133,13 @@ export const useChatStore = create((set,get)=>({
             const cursor = messages[0].createdAt;
             const res = await axiosInstance.get(`/messages/${userId}?cursor=${cursor}&limit=50`);
             set((state) => ({
-                messages: [...res.data, ...state.messages],
-                hasMoreMessages: res.data.length >= 50,
-                isLoadingMore: false,
+                ...(state.selectedUser?._id === userId
+                    ? {
+                        messages: [...res.data, ...state.messages],
+                        hasMoreMessages: res.data.length >= 50,
+                        isLoadingMore: false,
+                    }
+                    : {}),
             }));
         } catch (error) {
             set({ isLoadingMore: false });
@@ -132,6 +150,7 @@ export const useChatStore = create((set,get)=>({
     sendMessage: async (data) => {
         const { selectedUser } = get();
         const { authUser } = useAuthStore.getState();
+        if (!selectedUser || !authUser) return;
         const tempId = `temp_${Date.now()}`;
         const optimisticMessage = {
             _id: tempId,
@@ -149,11 +168,14 @@ export const useChatStore = create((set,get)=>({
         try {
             const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, data);
             const savedMessage = res.data.message;
-            // Swap temp with real message
+            // The sender also receives a socket echo. Remove that real-message
+            // echo before replacing the optimistic item so one send is rendered once.
             set((state) => ({
-                messages: state.messages.map((msg) =>
-                    msg._id === tempId ? savedMessage : msg
-                ),
+                messages: state.messages
+                    .filter((msg) => msg._id !== savedMessage._id || msg._id === tempId)
+                    .map((msg) =>
+                        msg._id === tempId ? savedMessage : msg
+                    ),
             }));
             // Update sidebar immediately with the new last message
             get().getMyChatPartners();

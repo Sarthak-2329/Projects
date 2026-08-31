@@ -23,7 +23,7 @@ int main(int argc, char* argv[]) {
     std::cout << "   C++ Core High-Concurrency Networking Engine    " << std::endl;
     std::cout << "===================================================" << std::endl;
 
-    auto engine = std::make_unique<SocketEngine>(port, 8);
+    auto engine = std::make_unique<SocketEngine>(port);
     if (!engine->start()) {
         std::cerr << "[Main]: Engine failed to start!" << std::endl;
         return 1;

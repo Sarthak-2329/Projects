@@ -9,6 +9,8 @@
 #include <chrono>
 #include <iostream>
 #include <memory>
+#include <cstdint>
+#include <stdexcept>
 
 struct ClientSession {
     int socketFd;
@@ -28,6 +30,8 @@ struct ClientSession {
  */
 class RoomManager {
 public:
+    static constexpr size_t MAX_FRAME_SIZE = 1024 * 1024;
+    static constexpr size_t MAX_BUFFER_SIZE = 2 * MAX_FRAME_SIZE;
     RoomManager() = default;
     ~RoomManager() = default;
 
@@ -57,6 +61,9 @@ public:
 
     // Total connected clients count
     size_t getConnectedCount();
+
+    // Snapshot of active client sockets, used for orderly engine shutdown.
+    std::vector<int> getConnectedSockets();
 
 private:
     std::mutex managerMutex;

@@ -1,15 +1,16 @@
 #include "../include/socket_engine.hpp"
 #include "json.hpp"
 
+#include <cerrno>
+
 extern volatile sig_atomic_t g_running;
 
 #define MAX_EVENTS 64
 #define BUFFER_SIZE 4096
 
-SocketEngine::SocketEngine(int p, size_t threadPoolSize)
+SocketEngine::SocketEngine(int p)
     : port(p), listenFd(INVALID_SOCKET), isRunning(false), epollFd(-1) {
     initializePlatformSockets();
-    threadPool = std::make_unique<ThreadPool>(threadPoolSize);
     roomManager = std::make_unique<RoomManager>();
 }
 
@@ -93,9 +94,6 @@ bool SocketEngine::start() {
     isRunning = true;
     std::cout << "[SocketEngine]: Server initialized and listening on port " << port << "..." << std::endl;
 
-    // Start background heartbeat task
-    threadPool->enqueue([this]() { this->heartbeatRoutine(); });
-
     // Main network loop
     eventLoop();
     return true;
@@ -104,21 +102,35 @@ bool SocketEngine::start() {
 void SocketEngine::eventLoop() {
 #if defined(__linux__)
     struct epoll_event events[MAX_EVENTS];
+    auto nextHeartbeatSweep = std::chrono::steady_clock::now() + std::chrono::seconds(15);
     while (isRunning && g_running) {
         int nfds = epoll_wait(epollFd, events, MAX_EVENTS, 500); // 500ms timeout
+        if (nfds < 0) {
+            if (errno == EINTR) continue;
+            std::cerr << "[SocketEngine Error]: epoll_wait failed" << std::endl;
+            break;
+        }
         for (int i = 0; i < nfds; ++i) {
             int fd = events[i].data.fd;
             if (fd == listenFd) {
                 handleIncomingConnection();
             } else if (events[i].events & (EPOLLHUP | EPOLLERR)) {
-                roomManager->removeClient(fd);
-                epoll_ctl(epollFd, EPOLL_CTL_DEL, fd, nullptr);
-                CLOSESOCKET(fd);
-            } else if (events[i].events & EPOLLIN) {
-                threadPool->enqueue([this, fd]() {
-                    this->handleClientData(fd);
-                });
+                closeClient(fd);
+            } else {
+                if (events[i].events & EPOLLIN) handleClientData(fd);
+                if (events[i].events & EPOLLOUT) flushPendingWrites(fd);
             }
+        }
+
+        if (std::chrono::steady_clock::now() >= nextHeartbeatSweep) {
+            for (int fd : roomManager->getConnectedSockets()) {
+                sendFramed(fd, R"({"type":"PING"})");
+            }
+            for (int fd : roomManager->checkTimeouts(30)) {
+                std::cout << "[SocketEngine Heartbeat]: Timing out inactive client fd " << fd << std::endl;
+                closeClient(fd);
+            }
+            nextHeartbeatSweep = std::chrono::steady_clock::now() + std::chrono::seconds(15);
         }
     }
 #else
@@ -157,9 +169,13 @@ void SocketEngine::handleIncomingConnection() {
 
 #if defined(__linux__)
         struct epoll_event ev{};
-        ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+        ev.events = EPOLLIN | EPOLLET;
         ev.data.fd = clientFd;
-        epoll_ctl(epollFd, EPOLL_CTL_ADD, clientFd, &ev);
+        if (epoll_ctl(epollFd, EPOLL_CTL_ADD, clientFd, &ev) == -1) {
+            std::cerr << "[SocketEngine Error]: epoll_ctl failed for client socket" << std::endl;
+            CLOSESOCKET(clientFd);
+            continue;
+        }
 #endif
 
         char ipStr[INET_ADDRSTRLEN];
@@ -179,9 +195,15 @@ void SocketEngine::handleClientData(socket_t clientFd) {
 
         if (bytesRead > 0) {
             roomManager->updateHeartbeat(clientFd);
-            auto frames = roomManager->feedAndExtractFrames(clientFd, buffer, bytesRead);
-            for (const auto& payload : frames) {
-                processPacketPayload(clientFd, payload);
+            try {
+                auto frames = roomManager->feedAndExtractFrames(clientFd, buffer, bytesRead);
+                for (const auto& payload : frames) {
+                    processPacketPayload(clientFd, payload);
+                }
+            } catch (const std::exception& err) {
+                std::cerr << "[SocketEngine]: Closing fd " << clientFd << ": " << err.what() << std::endl;
+                clientDisconnected = true;
+                break;
             }
         } else if (bytesRead == 0) {
             // Connection gracefully closed by client
@@ -202,21 +224,9 @@ void SocketEngine::handleClientData(socket_t clientFd) {
 
     if (clientDisconnected) {
         std::cout << "[SocketEngine]: Client disconnected (fd: " << clientFd << ")" << std::endl;
-        roomManager->removeClient(clientFd);
-#if defined(__linux__)
-        epoll_ctl(epollFd, EPOLL_CTL_DEL, clientFd, nullptr);
-#endif
-        CLOSESOCKET(clientFd);
+        closeClient(clientFd);
         return;
     }
-
-#if defined(__linux__)
-    // Re-arm epoll ONESHOT flag after reading all available data
-    struct epoll_event ev{};
-    ev.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
-    ev.data.fd = clientFd;
-    epoll_ctl(epollFd, EPOLL_CTL_MOD, clientFd, &ev);
-#endif
 }
 
 void SocketEngine::processPacketPayload(socket_t clientFd, const std::string& payload) {
@@ -228,6 +238,8 @@ void SocketEngine::processPacketPayload(socket_t clientFd, const std::string& pa
 
         if (type == "PING") {
             sendFramed(clientFd, R"({"type":"PONG"})");
+        } else if (type == "PONG") {
+            // Receiving any data already refreshed the session heartbeat.
         } else if (type == "JOIN") {
             std::string room = packet.value("room", "default");
             roomManager->joinRoom(clientFd, room);
@@ -250,26 +262,89 @@ void SocketEngine::processPacketPayload(socket_t clientFd, const std::string& pa
             }
             broadcastToRoom(targetRoom, payload);
         }
-    } catch (const nlohmann::json::parse_error& e) {
-        std::cerr << "[SocketEngine]: JSON parse error from fd " << clientFd << ": " << e.what() << std::endl;
+    } catch (const std::exception& e) {
+        std::cerr << "[SocketEngine]: Invalid packet from fd " << clientFd << ": " << e.what() << std::endl;
     }
 }
 
 bool SocketEngine::sendFramed(socket_t clientFd, const std::string& payload) {
+    constexpr size_t MAX_PENDING_WRITE_BYTES = 4 * 1024 * 1024;
+    if (payload.size() > RoomManager::MAX_FRAME_SIZE) return false;
+
     uint32_t payloadLen = htonl(static_cast<uint32_t>(payload.size()));
     std::vector<uint8_t> frame(4 + payload.size());
     std::memcpy(frame.data(), &payloadLen, 4);
     std::memcpy(frame.data() + 4, payload.data(), payload.size());
 
-    int totalSent = 0;
-    int toSend = static_cast<int>(frame.size());
-
-    while (totalSent < toSend) {
-        int sent = send(clientFd, (const char*)frame.data() + totalSent, toSend - totalSent, 0);
-        if (sent <= 0) return false;
-        totalSent += sent;
+    auto& pending = pendingWrites[clientFd];
+    if (pending.size() + frame.size() > MAX_PENDING_WRITE_BYTES) {
+        closeClient(clientFd);
+        return false;
     }
+    pending.insert(pending.end(), frame.begin(), frame.end());
+    return flushPendingWrites(clientFd);
+}
+
+bool SocketEngine::flushPendingWrites(socket_t clientFd) {
+    auto pendingIt = pendingWrites.find(clientFd);
+    if (pendingIt == pendingWrites.end()) return true;
+
+    auto& pending = pendingIt->second;
+    while (!pending.empty()) {
+#ifdef _WIN32
+        int sent = send(clientFd, reinterpret_cast<const char*>(pending.data()), static_cast<int>(pending.size()), 0);
+#else
+        int sent = send(clientFd, pending.data(), pending.size(), MSG_NOSIGNAL);
+#endif
+        if (sent > 0) {
+            pending.erase(pending.begin(), pending.begin() + sent);
+            continue;
+        }
+        if (sent < 0) {
+#ifdef _WIN32
+            if (WSAGetLastError() == WSAEWOULDBLOCK) {
+#else
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+#endif
+                updateClientEvents(clientFd);
+                return true;
+            }
+#ifndef _WIN32
+            if (errno == EINTR) continue;
+#endif
+        }
+        closeClient(clientFd);
+        return false;
+    }
+
+    pendingWrites.erase(pendingIt);
+    updateClientEvents(clientFd);
     return true;
+}
+
+void SocketEngine::updateClientEvents(socket_t clientFd) {
+#if defined(__linux__)
+    if (epollFd == -1) return;
+    struct epoll_event ev{};
+    ev.events = EPOLLIN | EPOLLET;
+    if (pendingWrites.find(clientFd) != pendingWrites.end()) ev.events |= EPOLLOUT;
+    ev.data.fd = clientFd;
+    epoll_ctl(epollFd, EPOLL_CTL_MOD, clientFd, &ev);
+#else
+    (void)clientFd;
+#endif
+}
+
+void SocketEngine::closeClient(socket_t clientFd) {
+    ClientSession session;
+    if (!roomManager->getClient(clientFd, session)) return;
+
+    pendingWrites.erase(clientFd);
+    roomManager->removeClient(clientFd);
+#if defined(__linux__)
+    if (epollFd != -1) epoll_ctl(epollFd, EPOLL_CTL_DEL, clientFd, nullptr);
+#endif
+    CLOSESOCKET(clientFd);
 }
 
 bool SocketEngine::broadcastToRoom(const std::string& roomId, const std::string& payload) {
@@ -280,26 +355,13 @@ bool SocketEngine::broadcastToRoom(const std::string& roomId, const std::string&
     return true;
 }
 
-void SocketEngine::heartbeatRoutine() {
-    while (isRunning && g_running) {
-        std::this_thread::sleep_for(std::chrono::seconds(15));
-        if (!isRunning) break;
-
-        std::vector<int> timedOutFds = roomManager->checkTimeouts(30);
-        for (int fd : timedOutFds) {
-            std::cout << "[SocketEngine Heartbeat]: Timing out inactive client fd " << fd << std::endl;
-            roomManager->removeClient(fd);
-#if defined(__linux__)
-            epoll_ctl(epollFd, EPOLL_CTL_DEL, fd, nullptr);
-#endif
-            CLOSESOCKET(fd);
-        }
-    }
-}
-
 void SocketEngine::stop() {
     if (!isRunning) return;
     isRunning = false;
+
+    for (int clientFd : roomManager->getConnectedSockets()) {
+        closeClient(clientFd);
+    }
 
     if (IS_VALIDSOCKET(listenFd)) {
         CLOSESOCKET(listenFd);

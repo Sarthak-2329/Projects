@@ -55,7 +55,7 @@ library, rather than application-specific code.
 
 ### Separate C++ core
 
-- C++17, a custom thread pool, and nlohmann/json.
+- C++17, buffered non-blocking socket writes, and nlohmann/json.
 - Linux uses non-blocking, edge-triggered `epoll`; Windows has a limited
   `select` fallback.
 - It accepts raw TCP rather than HTTP or Socket.IO.

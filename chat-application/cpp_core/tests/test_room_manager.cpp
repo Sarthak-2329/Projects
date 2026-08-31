@@ -233,3 +233,21 @@ TEST_CASE("feedAndExtractFrames handles binary payload correctly") {
     REQUIRE_EQ(frames.size(), static_cast<size_t>(1));
     CHECK(frames[0] == payload);
 }
+
+TEST_CASE("feedAndExtractFrames rejects an oversized frame before buffering its payload") {
+    RoomManager rm;
+    rm.addClient(106, "uid-f7", "Tester", "room-T");
+
+    const uint32_t oversizedLength = htonl(static_cast<uint32_t>(RoomManager::MAX_FRAME_SIZE + 1));
+    uint8_t header[4];
+    std::memcpy(header, &oversizedLength, sizeof(header));
+
+    bool threw = false;
+    try {
+        rm.feedAndExtractFrames(106, header, sizeof(header));
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+
+    CHECK(threw);
+}

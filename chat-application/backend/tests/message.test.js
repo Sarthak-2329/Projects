@@ -92,6 +92,17 @@ describe('POST /api/messages/send/:receiverId', () => {
     expect(res.status).toBe(400);
   });
 
+  it('rejects whitespace-only messages', async () => {
+    const { agent: senderAgent } = await makeAuthenticatedAgent('whitespace-sender@test.com');
+    const { user: receiver } = await makeAuthenticatedAgent('whitespace-receiver@test.com');
+
+    const res = await senderAgent
+      .post(`/api/messages/send/${receiver._id}`)
+      .send({ text: '   ' });
+
+    expect(res.status).toBe(400);
+  });
+
   it('returns 400 when a user tries to message themselves', async () => {
     const { agent, user } = await makeAuthenticatedAgent('self@test.com');
 
@@ -139,5 +150,32 @@ describe('GET /api/messages/contacts', () => {
     const emails = res.body.map((u) => u.email);
     expect(emails).toContain('verified.contact@test.com');
     expect(emails).not.toContain('unverified.contact@test.com');
+    const verifiedContact = res.body.find((u) => u.email === 'verified.contact@test.com');
+    expect(verifiedContact).not.toHaveProperty('password');
+    expect(verifiedContact).not.toHaveProperty('passwordResetToken');
+    expect(verifiedContact).not.toHaveProperty('emailVerifyToken');
+  });
+});
+
+describe('GET /api/messages/:id pagination validation', () => {
+  it('rejects an invalid page size before querying messages', async () => {
+    const { agent, user } = await makeAuthenticatedAgent('pagination-owner@test.com');
+    const contact = await makeAuthenticatedAgent('pagination-contact@test.com');
+
+    const res = await agent.get(`/api/messages/${contact.user._id}?limit=1000`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/between 1 and 100/);
+    expect(user._id).toBeDefined();
+  });
+
+  it('rejects an invalid pagination cursor', async () => {
+    const { agent } = await makeAuthenticatedAgent('cursor-owner@test.com');
+    const { user: contact } = await makeAuthenticatedAgent('cursor-contact@test.com');
+
+    const res = await agent.get(`/api/messages/${contact._id}?cursor=not-a-date`);
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/cursor/i);
   });
 });

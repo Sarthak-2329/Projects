@@ -100,6 +100,17 @@ size_t RoomManager::getConnectedCount() {
     return sessions.size();
 }
 
+std::vector<int> RoomManager::getConnectedSockets() {
+    std::lock_guard<std::mutex> lock(managerMutex);
+    std::vector<int> result;
+    result.reserve(sessions.size());
+    for (const auto& [fd, session] : sessions) {
+        (void)session;
+        result.push_back(fd);
+    }
+    return result;
+}
+
 std::vector<std::string> RoomManager::feedAndExtractFrames(int socketFd, const uint8_t* data, size_t len) {
     std::lock_guard<std::mutex> lock(managerMutex);
     std::vector<std::string> frames;
@@ -107,12 +118,18 @@ std::vector<std::string> RoomManager::feedAndExtractFrames(int socketFd, const u
     if (it == sessions.end()) return frames;
     
     auto& buf = it->second.readBuffer;
+    if (len > MAX_BUFFER_SIZE || buf.size() > MAX_BUFFER_SIZE - len) {
+        throw std::runtime_error("Client frame buffer exceeds the configured limit");
+    }
     buf.insert(buf.end(), data, data + len);
     
     while (buf.size() >= 4) {
         uint32_t payloadLength = 0;
         std::memcpy(&payloadLength, buf.data(), 4);
         payloadLength = ntohl(payloadLength);
+        if (payloadLength > MAX_FRAME_SIZE) {
+            throw std::runtime_error("Client frame exceeds the configured limit");
+        }
         
         if (buf.size() < 4 + payloadLength) break;
         

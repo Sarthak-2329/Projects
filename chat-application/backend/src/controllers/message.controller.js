@@ -9,7 +9,7 @@ export const getAllContacts = async (req, res) => {
     const filteredUsers = await User.find({
       _id: { $ne: loggedInUserId },
       isEmailVerified: true,
-    }).select("-password");
+    }).select("_id fullName email profilePic");
 
     res.status(200).json(filteredUsers);
   } catch (error) {
@@ -28,7 +28,13 @@ export const getMessagesByUserId = async (req, res) => {
   try {
     const myId = req.user._id;
     const { id: userToChatId } = req.params;
-    const { cursor, limit = 50 } = req.query;
+    const { cursor } = req.query;
+    const requestedLimit = req.query.limit ?? "50";
+    const limit = Number(requestedLimit);
+
+    if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
+      return res.status(400).json({ message: "Limit must be an integer between 1 and 100" });
+    }
 
     const query = {
       $or: [
@@ -38,12 +44,16 @@ export const getMessagesByUserId = async (req, res) => {
     };
 
     if (cursor) {
-      query.createdAt = { $lt: new Date(cursor) };
+      const cursorDate = new Date(cursor);
+      if (Number.isNaN(cursorDate.getTime())) {
+        return res.status(400).json({ message: "Invalid pagination cursor" });
+      }
+      query.createdAt = { $lt: cursorDate };
     }
 
     const messages = await Message.find(query)
       .sort({ createdAt: -1 })
-      .limit(parseInt(limit));
+      .limit(limit);
 
     res.status(200).json(messages.reverse());
   } catch (error) {
@@ -61,8 +71,12 @@ export const sendMessage = async (req, res) => {
     const { id: receiverId } = req.params;
     const senderId = req.user._id;
 
-    if (!text && !image) {
+    const normalizedText = typeof text === "string" ? text.trim() : "";
+    if (!normalizedText && !image) {
       return res.status(400).json({ message: "Text or image is required." });
+    }
+    if (image && typeof image !== "string") {
+      return res.status(400).json({ message: "Image must be a valid string payload." });
     }
     if (senderId.equals(receiverId)) {
       return res.status(400).json({ message: "Cannot send messages to yourself." });
@@ -82,7 +96,7 @@ export const sendMessage = async (req, res) => {
     const newMessage = new Message({
       senderId,
       receiverId,
-      text,
+      text: normalizedText,
       image: imageUrl,
       status: "sent",
     });
