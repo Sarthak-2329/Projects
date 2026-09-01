@@ -27,6 +27,20 @@ jobs:
       - name: Lint backend
         run: npm run lint --prefix backend
 
+      - name: Get mongodb-memory-server version
+        id: mms-version
+        run: |
+          VERSION=$(node -p "require('./backend/package-lock.json').packages['node_modules/mongodb-memory-server'].version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Cache MongoDB binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: ${{ runner.os }}-mongodb-binaries-${{ steps.mms-version.outputs.version }}
+          restore-keys: |
+            ${{ runner.os }}-mongodb-binaries-
+
       - name: Run backend tests
         run: npm test --prefix backend
 

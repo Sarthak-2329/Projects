@@ -12,7 +12,7 @@ This document records real load testing and throughput benchmarks measured using
 
 ## 🎯 Test Methodology
 
-The load test script ([`backend/loadtest/chat-flow.js`](file:///home/sarthak-surale/Documents/Programming/Projects/chat-application/backend/loadtest/chat-flow.js)) models realistic end-to-end user behavior rather than simple synthetic endpoint pinging:
+The load test script ([`backend/loadtest/chat-flow.js`](./backend/loadtest/chat-flow.js)) models realistic end-to-end user behavior rather than simple synthetic endpoint pinging:
 
 1. **Authentication**: Virtual users (VUs) log in via `POST /api/auth/login` and receive session JWT cookies.
 2. **Contact Discovery**: VUs fetch their contact list via `GET /api/messages/contacts`.

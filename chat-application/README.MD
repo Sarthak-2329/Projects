@@ -33,7 +33,7 @@ A production-grade, real-time one-to-one chat platform with a **React 19 fronten
 
 ### 📈 3. Observability & Performance Benchmarks
 - **Production Observability**: Structured JSON logging via `pino`, request duration logging with `pino-http`, health probes at `GET /api/health`, and Prometheus metrics at `GET /metrics`.
-- **Verified Load Performance**: Sustains **58.37 req/sec with 0.00% error rate and 100% message delivery ACK** under 50 concurrent virtual users holding active Socket.io sessions. Detailed methodology and 200 VU stress figures are published in [**`BENCHMARKS.md`**](file:///home/sarthak-surale/Documents/Programming/Projects/chat-application/BENCHMARKS.md).
+- **Verified Load Performance**: Sustains **58.37 req/sec with 0.00% error rate and 100% message delivery ACK** under 50 concurrent virtual users holding active Socket.io sessions. Detailed methodology and 200 VU stress figures are published in [**`BENCHMARKS.md`**](./BENCHMARKS.md).
 
 ---
 

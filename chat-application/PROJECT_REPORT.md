@@ -15,6 +15,8 @@ product surface.
 | `frontend/` | React 19 + Vite single-page application used by chat users. |
 | `backend/` | Express API, MongoDB models, Socket.IO server, authentication, media/email/security integrations. |
 | `docker-compose.yml` | Multi-container orchestration (MongoDB, Redis, Backend, Frontend). |
+| `.github/workflows/ci.yml` | GitHub Actions CI pipeline running linting, tests, and Docker build validation. |
+| `BENCHMARKS.md` | Load test methodology, hardware environment notes, and measured throughput/latency figures. |
 | `README.MD` | High-level architecture overview and getting-started guide. |
 | root `package.json` | Convenience build, start, and test commands. |
 
@@ -40,6 +42,8 @@ product surface.
 - Resend handles verification and password-reset emails.
 - Arcjet applies a shield rule, bot detection, and rate limiting to API routes.
 - Optional Redis (`REDIS_URL`) enables `@socket.io/redis-adapter` and cross-instance presence tracking for horizontal scaling.
+- Pino and Pino HTTP provide structured JSON logging in production, pretty printing in development, and automated HTTP request-duration logging.
+- Prom-client collects default Node.js runtime metrics alongside custom counters and histograms in Prometheus exposition format.
 
 ## 4. User experience and visual design
 
@@ -126,8 +130,7 @@ the view does not jump. MongoDB indexes `senderId + receiverId + createdAt` and
 
 ## 6. HTTP API
 
-All endpoints are prefixed by `/api`. Authenticated endpoints require the JWT
-cookie.
+All endpoints are prefixed by `/api` unless otherwise noted. Authenticated endpoints require the JWT cookie.
 
 | Method and path | Auth | Behavior |
 | --- | --- | --- |
@@ -145,6 +148,8 @@ cookie.
 | `GET /messages/:id?cursor=&limit=50` | Yes | One-to-one history with cursor pagination. |
 | `POST /messages/send/:id` | Yes | Saves a text/image message and returns `{ ack, message }`. |
 | `PUT /messages/:id/read` | Yes | Marks a sender's messages as read. |
+| `GET /api/health` | No | Reports overall status, uptime, and live connectivity for MongoDB and Redis. |
+| `GET /metrics` | No | Prometheus exposition format metrics (HTTP metrics, active sockets, message counts). |
 
 ## 7. Real-time contract
 
@@ -185,6 +190,7 @@ MONGO_URI=mongodb://...
 JWT_SECRET=long-random-secret
 CLIENT_URL=http://localhost:5173
 NODE_ENV=development
+LOG_LEVEL=info
 CLOUDINARY_CLOUD_NAME=...
 CLOUDINARY_API_KEY=...
 CLOUDINARY_API_SECRET=...
@@ -211,9 +217,38 @@ To run test suites:
 npm run test:backend
 ```
 
-## 10. Best starting points for a new contributor
+## 10. Observability, CI/CD, and performance benchmarks
+
+### Observability and metrics
+
+- **Health check (`GET /api/health`)**: Probes downstream dependencies in real time. It checks MongoDB connection readiness (`readyState === 1`) and issues a `PING` command to Redis when `REDIS_URL` is set. When Redis is omitted, the response safely returns `redis: { status: "disabled" }` without failing the probe. Returns HTTP 200 with uptime and subsystem details when healthy, or HTTP 503 on service disruption.
+- **Prometheus metrics (`GET /metrics`)**: Scraped by Prometheus or compatible collectors via `prom-client`. Gathers default runtime metrics (memory usage, event loop lag, active handles) alongside custom domain metrics:
+  - `http_requests_total`: Request count partitioned by HTTP method, route, and status code.
+  - `http_request_duration_seconds`: Request duration histogram across standard latency buckets.
+  - `socket_connections_active`: Gauge tracking live Socket.IO client connections.
+  - `messages_sent_total`: Counter tracking successfully saved and dispatched chat messages.
+- **Structured logging**: Managed by Pino (`backend/src/lib/logger.js`). Outputs JSON formatted records in production and pretty-printed logs via `pino-pretty` in development. Request boundaries and response times are captured automatically by `pino-http` middleware, with health and metrics endpoints excluded to minimize log noise.
+
+### CI/CD pipeline
+
+The continuous integration pipeline in `.github/workflows/ci.yml` triggers on every push and pull request targeting the `main` branch. It executes three validation jobs:
+
+1. **`backend`**: Sets up Node.js 20 with npm caching, runs `npm ci --prefix backend`, lints via ESLint (`npm run lint --prefix backend`), caches the MongoDB memory server binary (`~/.cache/mongodb-binaries`) keyed to the `mongodb-memory-server` version in `backend/package-lock.json`, and executes all Vitest integration tests (`npm test --prefix backend`).
+2. **`frontend`**: Sets up Node.js 20 with npm caching, installs dependencies, validates linting rules with ESLint (`npm run lint --prefix frontend`), and compiles the Vite production asset bundle (`npm run build --prefix frontend`).
+3. **`docker`**: Validates `docker-compose.yml` configuration syntax (`docker compose config`) and builds both backend and frontend container images (`docker compose build backend frontend`) to detect Dockerfile regressions before deployment.
+
+### Load testing and published benchmarks
+
+The repository provides a k6 load test suite under `backend/loadtest/` with a standalone benchmark runner (`runner.js`) and realistic user flow script (`chat-flow.js`). The test exercises login authentication, contact discovery, message history retrieval, message dispatch with delivery ACKs, and persistent Socket.IO WebSocket connections with heartbeat handling.
+
+- At **50 concurrent virtual users**, the server sustained **58.37 HTTP req/sec** with a **0.00% error rate**, **100% message delivery ACK success**, and a median request latency of **398.14 ms**.
+- At **200 concurrent virtual users**, throughput scaled to **69.02 HTTP req/sec** with an error rate of **0.08%** and median latency of **1,509.00 ms**.
+- Complete methodology, percentile latency curves, and execution environment notes are documented in [`BENCHMARKS.md`](./BENCHMARKS.md).
+
+## 11. Best starting points for a new contributor
 
 1. Read `frontend/src/App.jsx`, then the Zustand stores (`useAuthStore.js`, `useChatStore.js`).
 2. Read `backend/src/server.js`, `backend/src/lib/createApp.js`, route files, controllers, then `backend/src/lib/socket.js`.
 3. Check `backend/src/models/Message.js` and `User.js` to understand persistence and indexes.
 4. Review automated tests under `backend/tests/` to understand API specifications and validation behavior.
+5. Review `.github/workflows/ci.yml` and `backend/loadtest/` for testing standards, CI checks, and load profile scripts.
