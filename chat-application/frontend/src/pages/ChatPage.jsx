@@ -9,7 +9,8 @@ import ChatContainer from '../components/ChatContainer';
 import NoConversationPlaceholder from '../components/NoConversationPlaceholder';
 
 function ChatPage() {
-  const { activeTab, selectedUser } = useChatStore();
+  const { activeTab, selectedUser, selectedGroup } = useChatStore();
+  const activeConversation = selectedUser || selectedGroup;
 
   return (
     <div className="body-gradient flex w-full h-screen px-2 py-2 sm:px-4 sm:py-4 overflow-hidden">
@@ -26,7 +27,7 @@ function ChatPage() {
               className={[
                 'flex-col bg-slate-900/75 border-r border-slate-800/70 backdrop-blur-xl',
                 'w-full md:w-[240px] xl:w-[260px]',
-                selectedUser ? 'hidden md:flex' : 'flex',
+                activeConversation ? 'hidden md:flex' : 'flex',
               ].join(' ')}
             >
               <ProfileHeader />
@@ -44,10 +45,10 @@ function ChatPage() {
             <div
               className={[
                 'flex-col bg-slate-950/80 flex-1',
-                selectedUser ? 'flex' : 'hidden md:flex',
+                activeConversation ? 'flex' : 'hidden md:flex',
               ].join(' ')}
             >
-              {selectedUser ? <ChatContainer /> : <NoConversationPlaceholder />}
+              {activeConversation ? <ChatContainer /> : <NoConversationPlaceholder />}
             </div>
 
           </div>

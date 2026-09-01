@@ -14,6 +14,7 @@ import mongoose from 'mongoose';
 
 import authRoutes from '../routes/auth.route.js';
 import messageRoutes from '../routes/message.route.js';
+import conversationRoutes from '../routes/conversation.route.js';
 import { ENV } from './env.js';
 import { logger } from './logger.js';
 import { register, httpRequestCounter, httpRequestDuration } from './metrics.js';
@@ -103,5 +104,6 @@ app.get('/api/health', async (_req, res) => {
 // ---- Routes ----
 app.use('/api/auth', authRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/conversations', conversationRoutes);
 
 export { app, server, io };

@@ -15,7 +15,15 @@ function MessageInput() {
   const typingTimeoutRef = useRef(null);
   const textareaRef = useRef(null);
 
-  const { sendMessage, isSoundEnabled, selectedUser, quickReplyText, setQuickReply } = useChatStore();
+  const {
+    sendMessage,
+    sendGroupMessage,
+    isSoundEnabled,
+    selectedUser,
+    selectedGroup,
+    quickReplyText,
+    setQuickReply,
+  } = useChatStore();
   const { socket } = useAuthStore();
 
   // Auto-grow textarea
@@ -33,7 +41,7 @@ function MessageInput() {
     }
   };
 
-  // --- Item 6: Prefill from quick-reply buttons ---
+  // --- Quick-reply buttons prefill ---
   useEffect(() => {
     if (quickReplyText) {
       setText(quickReplyText);
@@ -41,15 +49,23 @@ function MessageInput() {
     }
   }, [quickReplyText, setQuickReply]);
 
-  // --- Item 5: Typing indicator helpers ---
+  // --- Typing indicator helpers ---
   const emitTyping = () => {
-    if (!socket || !selectedUser) return;
-    socket.emit("typing", { receiverId: selectedUser._id });
+    if (!socket) return;
+    if (selectedGroup) {
+      socket.emit("typing", { conversationId: selectedGroup._id });
+    } else if (selectedUser) {
+      socket.emit("typing", { receiverId: selectedUser._id });
+    }
   };
 
   const emitStopTyping = () => {
-    if (!socket || !selectedUser) return;
-    socket.emit("stopTyping", { receiverId: selectedUser._id });
+    if (!socket) return;
+    if (selectedGroup) {
+      socket.emit("stopTyping", { conversationId: selectedGroup._id });
+    } else if (selectedUser) {
+      socket.emit("stopTyping", { receiverId: selectedUser._id });
+    }
   };
 
   const handleTextChange = (e) => {
@@ -77,10 +93,17 @@ function MessageInput() {
     clearTimeout(typingTimeoutRef.current);
     emitStopTyping();
 
-    sendMessage({
+    const payload = {
       text: text.trim(),
       image: imagePreview,
-    });
+    };
+
+    if (selectedGroup) {
+      sendGroupMessage(payload);
+    } else if (selectedUser) {
+      sendMessage(payload);
+    }
+
     setText("");
     setImagePreview("");
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -165,4 +188,5 @@ function MessageInput() {
     </div>
   );
 }
+
 export default MessageInput;

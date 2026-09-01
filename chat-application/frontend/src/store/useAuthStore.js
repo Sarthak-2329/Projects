@@ -239,8 +239,45 @@ export const useAuthStore = create((set,get)=>({
             useChatStore.getState().markAllReadFromSender(readBy, readAt);
         });
 
-        socket.on("typing",     ({ senderId }) => useChatStore.getState().setUserTyping(senderId));
-        socket.on("stopTyping", ({ senderId }) => useChatStore.getState().clearUserTyping(senderId));
+        socket.on("newGroupMessage", ({ message, conversationId }) => {
+            const { selectedGroup } = useChatStore.getState();
+            const selectedGroupId = selectedGroup?._id?.toString();
+
+            if (selectedGroupId && selectedGroupId === conversationId?.toString()) {
+                useChatStore.getState().addIncomingMessage(message);
+            }
+
+            useChatStore.getState().getGroups();
+
+            const { isSoundEnabled } = useChatStore.getState();
+            const senderId = message.senderId?._id || message.senderId;
+            if (isSoundEnabled && senderId?.toString() !== authUser._id?.toString()) {
+                const notificationSound = new Audio("/sounds/notification.mp3");
+                notificationSound.currentTime = 0;
+                notificationSound.play().catch((e) => console.log("Audio play error:", e));
+            }
+        });
+
+        socket.on("groupCreated", (group) => {
+            socket.emit("joinGroup", { conversationId: group._id });
+            useChatStore.getState().getGroups();
+        });
+
+        socket.on("typing", ({ senderId, senderName, conversationId }) => {
+            if (conversationId) {
+                useChatStore.getState().setGroupUserTyping(conversationId, senderId, senderName);
+            } else {
+                useChatStore.getState().setUserTyping(senderId);
+            }
+        });
+
+        socket.on("stopTyping", ({ senderId, conversationId }) => {
+            if (conversationId) {
+                useChatStore.getState().clearGroupUserTyping(conversationId, senderId);
+            } else {
+                useChatStore.getState().clearUserTyping(senderId);
+            }
+        });
     },
 
     disconnectSocket: ()=>{

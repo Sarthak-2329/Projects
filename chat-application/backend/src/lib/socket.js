@@ -6,6 +6,7 @@ import { logger } from "./logger.js";
 import { socketConnectionsActive } from "./metrics.js";
 import { socketAuthMiddleware } from "../middleware/socket.auth.middleware.js";
 import Message from "../models/Message.js";
+import Conversation from "../models/Conversation.js";
 
 const app = express();
 const server = http.createServer(app);
@@ -250,6 +251,16 @@ io.on("connection", async (socket) => {
   // the recipient as online but its event is emitted before this socket joins.
   socket.join(`user:${userId}`);
 
+  // Automatically join all groups the user is a member of
+  try {
+    const userGroups = await Conversation.find({ 'members.userId': userId }).select('_id');
+    for (const group of userGroups) {
+      socket.join(`group:${group._id.toString()}`);
+    }
+  } catch (err) {
+    logger.error({ error: err.message, userId }, "Error joining group socket rooms");
+  }
+
   // Always track locally (needed for local getUserSocketIds fallback)
   if (!userSocketMap[userId]) {
     userSocketMap[userId] = new Set();
@@ -263,6 +274,13 @@ io.on("connection", async (socket) => {
   } catch (err) {
     logger.error({ error: err.message }, "Error finalizing socket connection");
   }
+
+  // Dynamic group room joining (e.g. after group creation)
+  socket.on("joinGroup", ({ conversationId }) => {
+    if (conversationId) {
+      socket.join(`group:${conversationId}`);
+    }
+  });
 
   // 3. Event: Recipient opens chat window (Read Receipt)
   socket.on("messageRead", async ({ senderId }) => {
@@ -284,9 +302,30 @@ io.on("connection", async (socket) => {
     }
   });
 
-  // 4. Typing indicators — relay to recipient's room (Redis adapter routes cross-instance)
-  socket.on("typing",     ({ receiverId }) => io.to(`user:${receiverId}`).emit("typing",     { senderId: userId }));
-  socket.on("stopTyping", ({ receiverId }) => io.to(`user:${receiverId}`).emit("stopTyping", { senderId: userId }));
+  // 4. Typing indicators — relay to 1:1 recipient room or group room
+  socket.on("typing", ({ receiverId, conversationId }) => {
+    if (conversationId) {
+      socket.to(`group:${conversationId}`).emit("typing", {
+        senderId: userId,
+        senderName: socket.user.fullName,
+        conversationId,
+      });
+    } else if (receiverId) {
+      io.to(`user:${receiverId}`).emit("typing", { senderId: userId });
+    }
+  });
+
+  socket.on("stopTyping", ({ receiverId, conversationId }) => {
+    if (conversationId) {
+      socket.to(`group:${conversationId}`).emit("stopTyping", {
+        senderId: userId,
+        senderName: socket.user.fullName,
+        conversationId,
+      });
+    } else if (receiverId) {
+      io.to(`user:${receiverId}`).emit("stopTyping", { senderId: userId });
+    }
+  });
 
   // Disconnect handler
   socket.on("disconnect", async () => {
