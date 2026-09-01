@@ -42,6 +42,7 @@ product surface.
 - Resend handles verification and password-reset emails.
 - Arcjet applies a shield rule, bot detection, and rate limiting to API routes.
 - Optional Redis (`REDIS_URL`) enables `@socket.io/redis-adapter` and cross-instance presence tracking for horizontal scaling.
+- BullMQ powers asynchronous background job queuing backed by Redis. A dedicated worker (`backend/src/worker.js`) processes transactional emails off the critical HTTP request path with automatic retry (3 attempts) and exponential backoff, falling back to direct in-process execution when Redis is unset.
 - Pino and Pino HTTP provide structured JSON logging in production, pretty printing in development, and automated HTTP request-duration logging.
 - Prom-client collects default Node.js runtime metrics alongside custom counters and histograms in Prometheus exposition format.
 

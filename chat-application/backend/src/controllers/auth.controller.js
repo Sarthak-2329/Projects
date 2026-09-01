@@ -1,5 +1,10 @@
 import crypto from "crypto";
-import { sendPasswordResetEmail, sendVerificationEmail, sendWelcomeEmail } from "../emails/emailHandlers.js";
+import {
+  enqueueEmail,
+  JOB_WELCOME_EMAIL,
+  JOB_VERIFICATION_EMAIL,
+  JOB_PASSWORD_RESET_EMAIL,
+} from "../lib/queue.js";
 import { generateToken } from "../lib/utils.js";
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
@@ -49,12 +54,11 @@ export const signup = async (req, res) => {
     await newUser.save();
 
     const verifyLink = `${ENV.CLIENT_URL}/verify-email/${rawToken}`;
-    try {
-      await sendVerificationEmail(newUser.email, newUser.fullName, verifyLink);
-    } catch (emailError) {
-      // Don't abort signup if email fails — user can request a resend
-      logger.error({ error: emailError.message, email: newUser.email }, "Verification email failed");
-    }
+    enqueueEmail(JOB_VERIFICATION_EMAIL, {
+      email: newUser.email,
+      name: newUser.fullName,
+      verifyLink,
+    });
 
     res.status(201).json({
       pendingVerification: true,
@@ -141,12 +145,12 @@ export const verifyEmail = async (req, res) => {
     user.emailVerifyExpires = undefined;
     await user.save();
 
-    // Send welcome email upon successful verification
-    try {
-      await sendWelcomeEmail(user.email, user.fullName, ENV.CLIENT_URL);
-    } catch (welcomeErr) {
-      logger.error({ error: welcomeErr.message, email: user.email }, "Welcome email failed");
-    }
+    // Enqueue welcome email asynchronously upon successful verification
+    enqueueEmail(JOB_WELCOME_EMAIL, {
+      email: user.email,
+      name: user.fullName,
+      clientURL: ENV.CLIENT_URL,
+    });
 
     generateToken(user._id, res);
     res.status(200).json({
@@ -193,12 +197,11 @@ export const resendVerification = async (req, res) => {
     await user.save();
 
     const verifyLink = `${ENV.CLIENT_URL}/verify-email/${rawToken}`;
-    try {
-      await sendVerificationEmail(user.email, user.fullName, verifyLink);
-    } catch (emailError) {
-      logger.error({ error: emailError.message, email: user.email }, "Resend verification email failed");
-      return res.status(500).json({ message: "Failed to send email. Please try again later." });
-    }
+    enqueueEmail(JOB_VERIFICATION_EMAIL, {
+      email: user.email,
+      name: user.fullName,
+      verifyLink,
+    });
 
     res.status(200).json({
       message: "If that email is registered and unverified, a new link has been sent.",
@@ -273,15 +276,12 @@ export const forgotPassword = async (req, res) => {
     await user.save();
 
     const resetLink = `${ENV.CLIENT_URL}/reset-password/${rawToken}`;
-    try {
-      await sendPasswordResetEmail(user.email, user.fullName, resetLink);
-    } catch (emailError) {
-      user.passwordResetToken = undefined;
-      user.passwordResetExpires = undefined;
-      await user.save();
-      logger.error({ error: emailError.message, email: user.email }, "Reset email failed");
-      return res.status(500).json({ message: "Failed to send reset email. Please try again." });
-    }
+    enqueueEmail(JOB_PASSWORD_RESET_EMAIL, {
+      email: user.email,
+      name: user.fullName,
+      resetLink,
+    });
+
     res.status(200).json({ message: "If that email is registered, a reset link has been sent." });
   } catch (error) {
     if (error.name === "CastError") {

@@ -16,6 +16,7 @@
 #   mongo     – MongoDB 7                 (internal only)
 #   redis     – Redis 7                   (internal only)
 #   backend   – Node/Express/Socket.io    → localhost:3000
+#   worker    – BullMQ email worker       (internal background processor)
 #   frontend  – nginx serving React SPA   → localhost:80
 # =============================================================================
 
@@ -79,6 +80,28 @@ services:
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
       ARCJET_KEY: ${ARCJET_KEY}
       ARCJET_ENV: production
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+  # ---------------------------------------------------------------------------
+  # Worker  (BullMQ background queue worker for emails)
+  # ---------------------------------------------------------------------------
+  worker:
+    build: ./backend
+    command: npm run start:worker
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      MONGO_URI: mongodb://mongo:27017/chat
+      REDIS_URL: redis://redis:6379
+      CLIENT_URL: http://localhost
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-Messenger}
       LOG_LEVEL: ${LOG_LEVEL:-info}
 
   # ---------------------------------------------------------------------------
