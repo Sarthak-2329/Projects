@@ -6,6 +6,61 @@ import ChatHeader from './ChatHeader';
 import NoChatHistoryPlaceholder from './NoChatHistoryPlaceholder';
 import MessageInput from './MessageInput';
 import MessagesLoadingSkeleton from './MessagesLoadingSkeleton';
+import { getMyPrivateKey, importPublicKey, deriveSharedKey, decryptMessage } from '../lib/crypto';
+
+/**
+ * Derives the shared ECDH key for the active DM partner and decrypts all
+ * messages that carry encryptedText + iv.
+ *
+ * Returns a Map<messageId, decryptedText|null> where null means decryption
+ * failed (wrong key, corrupted data, or key lost after storage clear).
+ */
+function useDecryptedMessages(messages, partnerPublicKeyB64) {
+  const [decryptedMap, setDecryptedMap] = useState(new Map());
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function run() {
+      const myPrivateKey = getMyPrivateKey();
+      if (!myPrivateKey || !partnerPublicKeyB64) {
+        setDecryptedMap(new Map());
+        return;
+      }
+
+      const encryptedMsgs = messages.filter((m) => m.encryptedText && m.iv);
+      if (encryptedMsgs.length === 0) {
+        setDecryptedMap(new Map());
+        return;
+      }
+
+      let sharedKey;
+      try {
+        const theirPubKey = await importPublicKey(partnerPublicKeyB64);
+        sharedKey = await deriveSharedKey(myPrivateKey, theirPubKey);
+      } catch {
+        setDecryptedMap(new Map());
+        return;
+      }
+
+      const entries = await Promise.all(
+        encryptedMsgs.map(async (m) => {
+          const plain = await decryptMessage(sharedKey, m.encryptedText, m.iv);
+          return [m._id, plain];
+        })
+      );
+
+      if (!cancelled) {
+        setDecryptedMap(new Map(entries));
+      }
+    }
+
+    run();
+    return () => { cancelled = true; };
+  }, [messages, partnerPublicKeyB64]);
+
+  return decryptedMap;
+}
 
 function ChatContainer() {
   const {
@@ -25,6 +80,13 @@ function ChatContainer() {
   const scrollContainerRef = useRef(null);
 
   const [lightboxUrl, setLightboxUrl] = useState(null);
+
+  // Decrypt encrypted DM messages — runs whenever messages or the partner's public key changes.
+  // Only active for 1:1 DMs (selectedUser); group messages are not encrypted.
+  const decryptedMap = useDecryptedMessages(
+    messages,
+    selectedUser?.publicKey ?? null
+  );
 
   useEffect(() => {
     if (!lightboxUrl) return;
@@ -130,7 +192,24 @@ function ChatContainer() {
                       />
                     )}
 
-                    {msg.text && <p className="mt-1 leading-relaxed">{msg.text}</p>}
+                    {/* Message text — decrypt if encrypted, otherwise render plaintext */}
+                    {msg.encryptedText ? (
+                      (() => {
+                        // msg.text may hold the optimistic plaintext the sender set locally
+                        const resolved = decryptedMap.get(msg._id) ?? msg.text ?? null;
+                        if (resolved) {
+                          return <p className="mt-1 leading-relaxed">{resolved}</p>;
+                        }
+                        return (
+                          <p className="mt-1 leading-relaxed text-slate-400 italic text-sm">
+                            🔒 Encrypted
+                          </p>
+                        );
+                      })()
+                    ) : (
+                      msg.text && <p className="mt-1 leading-relaxed">{msg.text}</p>
+                    )}
+
 
                     <p className="text-[11px] mt-1.5 opacity-75 flex items-center gap-1 text-slate-300">
                       {new Date(msg.createdAt).toLocaleTimeString(undefined, {

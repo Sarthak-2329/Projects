@@ -253,3 +253,86 @@ The repository provides a k6 load test suite under `backend/loadtest/` with a st
 3. Check `backend/src/models/Message.js` and `User.js` to understand persistence and indexes.
 4. Review automated tests under `backend/tests/` to understand API specifications and validation behavior.
 5. Review `.github/workflows/ci.yml` and `backend/loadtest/` for testing standards, CI checks, and load profile scripts.
+
+---
+
+## 12. End-to-End Encryption for 1:1 Direct Messages
+
+### Overview
+
+Direct-message (DM) text content is encrypted client-side before transmission. The server acts as a dumb relay — it stores and forwards `{ encryptedText, iv }` blobs and never has access to plaintext.
+
+### Cryptographic Design
+
+#### Key Exchange — X25519 ECDH
+
+Each user generates an X25519 Elliptic-Curve Diffie-Hellman keypair on first login using the browser's `SubtleCrypto.generateKey` API. The private key is stored in **IndexedDB** (DB: `e2e-keystore`) as a non-extractable `CryptoKey` object — IndexedDB stores these opaquely without ever exposing raw bytes. The public key is base64-encoded (44 chars for the 32-byte raw X25519 key) and published to the server via `PUT /api/auth/publish-key`, stored in `User.publicKey`.
+
+When Alice wants to send to Bob:
+1. Alice fetches Bob's `publicKey` from the API response.
+2. Alice calls `SubtleCrypto.deriveKey({ name: "X25519", public: bobPublicKey }, alicePrivateKey, { name: "AES-GCM", length: 256 }, ...)` to produce a shared symmetric key.
+3. Bob can derive the identical key using `SubtleCrypto.deriveKey({ name: "X25519", public: alicePublicKey }, bobPrivateKey, ...)`.
+
+This is the standard ECDH property: both parties derive the same secret without transmitting it.
+
+#### Message Encryption — AES-256-GCM
+
+For each outgoing message:
+- A fresh **12-byte random IV** is generated with `crypto.getRandomValues`.
+- The plaintext is UTF-8 encoded and encrypted with `SubtleCrypto.encrypt({ name: "AES-GCM", iv }, sharedKey, encoded)`.
+- The resulting `{ ciphertext: base64, iv: base64 }` pair is sent in `{ encryptedText, iv }` request fields.
+
+AES-GCM provides **authenticated encryption** — ciphertext tampering is detected and decryption returns an error (which the client maps to `null`, rendering "🔒 Encrypted").
+
+### Data Model Changes
+
+#### `User` model
+```js
+publicKey: { type: String, default: null, maxlength: 100 }
+```
+
+#### `Message` model
+```js
+encryptedText: { type: String, maxlength: 8000 }  // base64 AES-GCM ciphertext
+iv:            { type: String, maxlength: 32 }     // base64 12-byte IV
+// text field retained for backward compatibility with pre-encryption messages and image-only messages
+```
+
+### API Changes
+
+| Endpoint | Change |
+|---|---|
+| `PUT /api/auth/publish-key` | **New** — stores the client's X25519 public key |
+| `GET /api/auth/check` | Now returns `publicKey` field |
+| `POST /api/auth/login` | Now returns `publicKey` field |
+| `POST /api/auth/verify-email` | Now returns `publicKey` field |
+| `GET /api/messages/contacts` | Now returns `publicKey` per contact |
+| `GET /api/messages/chats` | Now returns `publicKey` per partner + `isEncrypted` flag instead of `lastMessageText` for encrypted convos |
+| `POST /api/messages/send/:id` | Now accepts `{ encryptedText, iv }` in addition to `{ text, image }` |
+
+### Security Properties
+
+| Property | Value |
+|---|---|
+| Plaintext on server | ❌ Never — server only stores ciphertext |
+| IV reuse | ❌ Impossible — fresh `crypto.getRandomValues` per message |
+| Ciphertext integrity | ✅ AES-GCM authentication tag detects tampering |
+| Private key leakage | ❌ Stored only in IndexedDB, non-extractable CryptoKey |
+
+### Graceful Degradation
+
+- If a party's `publicKey` is not yet published (e.g., legacy account, slow key init), the message is sent as plaintext and encrypted on the next send once keys are available.
+- Old messages without `encryptedText` render their `text` field as-is (backward compatibility).
+- Messages whose decryption fails (lost key, wrong device) display "🔒 Encrypted" instead of crashing.
+
+### Explicit Scope and Known Limitations
+
+The following are **intentional out-of-scope decisions** for this implementation phase, explicitly noted rather than silently omitted:
+
+| Limitation | Rationale |
+|---|---|
+| **Image encryption** | Images are uploaded to Cloudinary server-side. Client-side image encryption would require base64-encoding the binary, encrypting it, and decrypting before display — significant complexity deferred to a future pass. |
+| **Group message encryption** | Group key management (N-party key agreement or pairwise key sets) is substantially more complex than 2-party ECDH. Out of scope for this pass. |
+| **Multi-device key sync** | Cross-device key distribution requires a secure key transport protocol (e.g., Signal's sealed sender, or a KDF + server-assisted re-encryption). Keys are intentionally per-browser for simplicity. |
+| **Forward secrecy** | This implementation uses static per-conversation shared keys. A full double-ratchet protocol (as used by Signal) would provide per-message forward secrecy but is architecturally more complex. |
+| **Key recovery** | If IndexedDB is cleared, old encrypted messages cannot be recovered. This is the correct and expected behaviour for a device-local key model. |

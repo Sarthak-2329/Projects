@@ -26,6 +26,16 @@ const messageSchema = new mongoose.Schema(
       trim: true,
       maxlength: 2000,
     },
+    // E2EE fields — present only on encrypted DM text messages.
+    // The server stores and relays these blobs without ever seeing plaintext.
+    encryptedText: {
+      type: String, // base64-encoded AES-256-GCM ciphertext
+      maxlength: 8000,
+    },
+    iv: {
+      type: String, // base64-encoded 12-byte random IV
+      maxlength: 32,
+    },
     image: {
       type: String,
     },

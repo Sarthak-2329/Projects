@@ -150,14 +150,16 @@ function ChatsList() {
         const unread = unreadMessages[chat._id] || 0;
 
         let preview = '';
-        if (chat.lastMessageImage && !chat.lastMessageText) {
+        if (chat.isEncrypted) {
+          preview = '🔒 Encrypted message';
+        } else if (chat.lastMessageImage && !chat.lastMessageText) {
           preview = '📷 Photo';
         } else if (chat.lastMessageText) {
           preview = chat.lastMessageText;
         }
 
         const isMine = chat.lastMessageSenderId?.toString() === authUser?._id?.toString();
-        if (preview && isMine) preview = `You: ${preview}`;
+        if (preview && isMine && !chat.isEncrypted) preview = `You: ${preview}`;
 
         return (
           <button

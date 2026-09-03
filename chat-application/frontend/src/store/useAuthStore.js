@@ -3,6 +3,7 @@ import {axiosInstance} from "../lib/axios";
 import toast from 'react-hot-toast';
 import {io} from 'socket.io-client';
 import { useChatStore } from './useChatStore';
+import { loadOrGenerateKeyPair } from '../lib/crypto';
 
 const BASE_URL = import.meta.env.MODE==="development" ? "http://localhost:3000" : "/";
 
@@ -27,11 +28,36 @@ export const useAuthStore = create((set,get)=>({
         return { unreadMessages: updated };
     }),
 
+    // -------------------------------------------------------------------------
+    // E2EE key initialisation
+    // Loads (or generates) the local X25519 keypair from IndexedDB and publishes
+    // the public key to the server when it's new or the server record is absent.
+    // Called silently after every successful authentication — errors are caught
+    // so a crypto failure never blocks the login/session-restore flow.
+    // -------------------------------------------------------------------------
+    initE2EKeys: async (user) => {
+        try {
+            const { publicKeyBase64, isNew } = await loadOrGenerateKeyPair(user._id);
+            // Publish if this is a freshly generated key OR the server has no key yet
+            if (isNew || !user.publicKey) {
+                await axiosInstance.put("/auth/publish-key", { publicKey: publicKeyBase64 });
+                // Update local authUser so getChatPartners etc. see the fresh key
+                set((state) => ({
+                    authUser: state.authUser ? { ...state.authUser, publicKey: publicKeyBase64 } : state.authUser,
+                }));
+            }
+        } catch (err) {
+            // Non-fatal: messaging still works but encryption is unavailable
+            console.warn("E2EE key init failed:", err);
+        }
+    },
+
     checkAuth: async ()=>{
         try {
             const res = await axiosInstance.get("/auth/check");
             set({authUser:res.data});
             get().connectSocket();
+            get().initE2EKeys(res.data);
         } catch (error) {
             console.log("Error in authCheck: ",error);
             set({authUser:null});
@@ -74,6 +100,7 @@ export const useAuthStore = create((set,get)=>({
             set({authUser:res.data});
             toast.success("Logged in successfully");
             get().connectSocket();
+            get().initE2EKeys(res.data);
             return null;
         } catch (error) {
             const code = error.response?.data?.code;
@@ -120,6 +147,7 @@ export const useAuthStore = create((set,get)=>({
             set({ authUser: res.data, pendingVerificationEmail: null });
             toast.success("Email verified! Welcome to Messenger 🎉");
             get().connectSocket();
+            get().initE2EKeys(res.data);
             return true;
         } catch (error) {
             toast.error(error.response?.data?.message || "Verification failed. The link may have expired.");

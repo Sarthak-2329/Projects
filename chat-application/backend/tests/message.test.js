@@ -68,7 +68,7 @@ describe('POST /api/messages/send/:receiverId', () => {
     expect(res.status).toBe(401);
   });
 
-  it('sends a text message and returns 201 with the message', async () => {
+  it('sends a plaintext text message and returns 201 with the message', async () => {
     const { agent: senderAgent } = await makeAuthenticatedAgent('sender@test.com');
     const { user: receiver }     = await makeAuthenticatedAgent('receiver@test.com');
 
@@ -80,6 +80,64 @@ describe('POST /api/messages/send/:receiverId', () => {
     expect(res.body.message).toBeDefined();
     expect(res.body.message.text).toBe('Hey there!');
     expect(res.body.message.status).toMatch(/^(sent|delivered)$/);
+  });
+
+  it('accepts encryptedText + iv and stores ciphertext (never plaintext)', async () => {
+    const { agent: senderAgent } = await makeAuthenticatedAgent('enc-sender@test.com');
+    const { user: receiver }     = await makeAuthenticatedAgent('enc-receiver@test.com');
+
+    // Simulate base64 ciphertext and IV (actual crypto happens client-side)
+    const fakeEncryptedText = Buffer.from('fake-ciphertext-payload').toString('base64');
+    const fakeIv            = Buffer.from('123456789012').toString('base64'); // 12 bytes
+
+    const res = await senderAgent
+      .post(`/api/messages/send/${receiver._id}`)
+      .send({ encryptedText: fakeEncryptedText, iv: fakeIv });
+
+    expect(res.status).toBe(201);
+    expect(res.body.message).toBeDefined();
+    expect(res.body.message.encryptedText).toBe(fakeEncryptedText);
+    expect(res.body.message.iv).toBe(fakeIv);
+    // Server must NOT store plaintext when ciphertext is provided
+    expect(res.body.message.text == null || res.body.message.text === '').toBe(true);
+  });
+
+  it('rejects encryptedText without iv', async () => {
+    const { agent: senderAgent } = await makeAuthenticatedAgent('enc-no-iv-sender@test.com');
+    const { user: receiver }     = await makeAuthenticatedAgent('enc-no-iv-recv@test.com');
+
+    const res = await senderAgent
+      .post(`/api/messages/send/${receiver._id}`)
+      .send({ encryptedText: Buffer.from('ciphertext').toString('base64') });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/iv/i);
+  });
+
+  it('rejects iv without encryptedText', async () => {
+    const { agent: senderAgent } = await makeAuthenticatedAgent('iv-no-enc-sender@test.com');
+    const { user: receiver }     = await makeAuthenticatedAgent('iv-no-enc-recv@test.com');
+
+    const res = await senderAgent
+      .post(`/api/messages/send/${receiver._id}`)
+      .send({ iv: Buffer.from('123456789012').toString('base64') });
+
+    expect(res.status).toBe(400);
+    expect(res.body.message).toMatch(/encryptedText/i);
+  });
+
+  it('rejects encryptedText exceeding the 8000-char limit', async () => {
+    const { agent: senderAgent } = await makeAuthenticatedAgent('oversized-enc@test.com');
+    const { user: receiver }     = await makeAuthenticatedAgent('oversized-recv@test.com');
+
+    const oversized = 'A'.repeat(9000);
+    const fakeIv    = Buffer.from('123456789012').toString('base64');
+
+    const res = await senderAgent
+      .post(`/api/messages/send/${receiver._id}`)
+      .send({ encryptedText: oversized, iv: fakeIv });
+
+    expect(res.status).toBe(400);
   });
 
   it('returns 400 when both text and image are missing', async () => {

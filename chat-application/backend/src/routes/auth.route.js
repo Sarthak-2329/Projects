@@ -8,6 +8,7 @@ import {
   resetPassword,
   verifyEmail,
   resendVerification,
+  publishPublicKey,
 } from '../controllers/auth.controller.js';
 import { protectRoute } from '../middleware/auth.middleware.js';
 import { arcjetProtection } from '../middleware/arcjet.middleware.js';
@@ -28,6 +29,13 @@ router.post("/resend-verification",  resendVerification);
 
 // Protected routes
 router.put("/update-profile", protectRoute, updateProfile);
-router.get("/check",          protectRoute, (req, res) => res.status(200).json(req.user));
+router.put("/publish-key",    protectRoute, publishPublicKey);
+router.get("/check",          protectRoute, (req, res) => res.status(200).json({
+  _id:        req.user._id,
+  fullName:   req.user.fullName,
+  email:      req.user.email,
+  profilePic: req.user.profilePic,
+  publicKey:  req.user.publicKey || null,
+}));
 
 export default router;

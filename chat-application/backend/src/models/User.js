@@ -42,6 +42,13 @@ const userSchema = new mongoose.Schema({
         type:Date,
         select:false,
     },
+    // X25519 public key (raw bytes, base64-encoded) published by the client for E2EE key exchange.
+    // The matching private key is stored only in the client's IndexedDB and is never sent to the server.
+    publicKey:{
+        type:String,
+        default:null,
+        maxlength:100, // raw X25519 key is 32 bytes → 44 chars base64
+    },
 },{timestamps:true});
 
 const User = mongoose.model("User",userSchema);

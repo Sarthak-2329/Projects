@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { LogOutIcon, VolumeOffIcon, Volume2Icon } from "lucide-react";
+import { LogOutIcon, VolumeOffIcon, Volume2Icon, LockIcon } from "lucide-react";
 import { useAuthStore } from "../store/useAuthStore";
 import { useChatStore } from "../store/useChatStore";
 
@@ -63,6 +63,13 @@ function ProfileHeader() {
             </h3>
 
             <p className="text-slate-400 text-xs">Online</p>
+
+            {/* E2EE notice: keys are stored on this device only */}
+            <p className="text-slate-600 text-[10px] flex items-center gap-1 mt-0.5"
+               title="Direct messages are end-to-end encrypted. Your private key is stored only in this browser. Clearing browser data will lose access to old encrypted messages.">
+              <LockIcon className="w-2.5 h-2.5 shrink-0" />
+              E2E encrypted · Key on this device only
+            </p>
           </div>
         </div>
 

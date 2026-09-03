@@ -90,3 +90,47 @@ npm run dev --prefix frontend          # Vite on :5173
 npm run build                          # Installs deps + builds frontend
 npm start                              # Serves from backend
 ```
+
+---
+
+## 🔒 End-to-End Encryption (DM Text Messages)
+
+Direct-message **text content** is end-to-end encrypted client-side. The server stores and relays ciphertext only — plaintext never leaves the sender's browser.
+
+### Cryptographic Scheme
+
+| Layer | Algorithm |
+|---|---|
+| Key exchange | **X25519 ECDH** (via Web Crypto API `SubtleCrypto`) |
+| Symmetric encryption | **AES-256-GCM** — authenticated encryption, prevents tampering |
+| IV | **12-byte random** per message — no IV reuse |
+
+### How It Works
+
+1. **Key generation** — On first login each client generates an X25519 keypair using `crypto.subtle.generateKey`. The **private key** is stored in the browser's **IndexedDB** (never sent to the server). The **public key** (base64, 44 chars) is published to the server and stored on the `User` document.
+
+2. **Key exchange** — When Alice sends a message to Bob, the client fetches Bob's public key (returned by the contacts/chats API), derives a shared symmetric key via `crypto.subtle.deriveKey` (ECDH), and encrypts the message text with AES-256-GCM.
+
+3. **Storage** — The server stores `{ encryptedText: base64, iv: base64 }` on the `Message` document. The original plaintext `text` field remains empty for encrypted messages.
+
+4. **Decryption** — Bob's client fetches Alice's public key, performs the same ECDH derivation (yielding the identical shared key), and decrypts each message before rendering.
+
+### Current Scope & Known Limitations
+
+> **These are intentional design decisions, not bugs.**
+
+| Limitation | Status |
+|---|---|
+| 🖼️ **Image encryption** | ❌ Not encrypted — images are uploaded to Cloudinary as-is |
+| 👥 **Group message encryption** | ❌ Not encrypted — only 1:1 DMs are encrypted in this pass |
+| 📱 **Multi-device key sync** | ❌ Not supported — keys are per-browser. A second device or cleared storage loses access to old messages. This is expected E2EE behaviour. |
+| 🔄 **Forward secrecy** | ❌ Not implemented — static per-conversation keys only (no double-ratchet protocol) |
+| 🔑 **Key recovery** | ❌ No recovery path — if IndexedDB is cleared, old encrypted messages cannot be decrypted |
+
+### Chat List Preview
+
+Since the server cannot decrypt message content, the sidebar shows **🔒 Encrypted message** in place of a text snippet for encrypted DM conversations.
+
+### Backwards Compatibility
+
+Messages sent before this feature was enabled (stored with a plaintext `text` field and no `encryptedText`) continue to render correctly as plaintext.

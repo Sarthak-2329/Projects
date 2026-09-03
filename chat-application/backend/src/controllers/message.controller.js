@@ -11,7 +11,7 @@ export const getAllContacts = async (req, res) => {
     const filteredUsers = await User.find({
       _id: { $ne: loggedInUserId },
       isEmailVerified: true,
-    }).select("_id fullName email profilePic");
+    }).select("_id fullName email profilePic publicKey");
 
     res.status(200).json(filteredUsers);
   } catch (error) {
@@ -69,12 +69,23 @@ export const getMessagesByUserId = async (req, res) => {
 
 export const sendMessage = async (req, res) => {
   try {
-    const { text, image } = req.body;
+    const { text, image, encryptedText, iv } = req.body;
     const { id: receiverId } = req.params;
     const senderId = req.user._id;
 
+    // Validate: encryptedText and iv must always come together
+    if (encryptedText && !iv) {
+      return res.status(400).json({ message: "iv is required when encryptedText is provided." });
+    }
+    if (iv && !encryptedText) {
+      return res.status(400).json({ message: "encryptedText is required when iv is provided." });
+    }
+
+    const isEncrypted = Boolean(encryptedText);
     const normalizedText = typeof text === "string" ? text.trim() : "";
-    if (!normalizedText && !image) {
+
+    // At least one of: encrypted content, plaintext, or image must be present
+    if (!isEncrypted && !normalizedText && !image) {
       return res.status(400).json({ message: "Text or image is required." });
     }
     if (image && typeof image !== "string") {
@@ -98,7 +109,10 @@ export const sendMessage = async (req, res) => {
     const newMessage = new Message({
       senderId,
       receiverId,
-      text: normalizedText,
+      // Store ciphertext when encrypted; otherwise store plaintext (backward compat)
+      ...(isEncrypted
+        ? { encryptedText, iv }
+        : { text: normalizedText }),
       image: imageUrl,
       status: "sent",
     });
@@ -174,9 +188,13 @@ export const getChatPartners = async (req, res) => {
      * 2. Derive the other participant as `partnerId`.
      * 3. Sort all messages newest-first so $first inside $group gives the latest.
      * 4. Group by partnerId — one document per conversation with the latest message.
+     *    Tracks whether the last message was E2EE (encryptedText present).
      * 5. Re-sort the per-conversation documents by most recent activity.
-     * 6. $lookup partner user documents (excludes password via $project).
+     * 6. $lookup partner user documents (excludes sensitive fields via $project).
      * 7. Project a flat object with user fields + last-message metadata.
+     *    For encrypted conversations, lastMessageText is not returned (server never
+     *    stores plaintext); instead an isEncrypted flag is set so the UI can
+     *    render "🔒 Encrypted message" in place of a snippet.
      */
     const partners = await Message.aggregate([
       {
@@ -194,11 +212,13 @@ export const getChatPartners = async (req, res) => {
       { $sort: { createdAt: -1 } },
       {
         $group: {
-          _id:                 "$partnerId",
-          lastMessageText:     { $first: "$text" },
-          lastMessageImage:    { $first: "$image" },
-          lastMessageAt:       { $first: "$createdAt" },
-          lastMessageSenderId: { $first: "$senderId" },
+          _id:                    "$partnerId",
+          lastMessageText:        { $first: "$text" },
+          lastMessageImage:       { $first: "$image" },
+          lastMessageAt:          { $first: "$createdAt" },
+          lastMessageSenderId:    { $first: "$senderId" },
+          // Track whether the most recent message is encrypted
+          lastMessageEncrypted:   { $first: { $cond: [{ $gt: ["$encryptedText", null] }, true, false] } },
         },
       },
       { $sort: { lastMessageAt: -1 } },
@@ -217,10 +237,15 @@ export const getChatPartners = async (req, res) => {
           fullName:            "$user.fullName",
           email:               "$user.email",
           profilePic:          "$user.profilePic",
-          lastMessageText:     1,
+          publicKey:           "$user.publicKey",
+          // Only expose plaintext snippet for non-encrypted messages
+          lastMessageText: {
+            $cond: ["$lastMessageEncrypted", "$$REMOVE", "$lastMessageText"],
+          },
           lastMessageImage:    1,
           lastMessageAt:       1,
           lastMessageSenderId: 1,
+          isEncrypted:         "$lastMessageEncrypted",
         },
       },
     ]);

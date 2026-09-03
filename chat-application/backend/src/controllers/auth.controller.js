@@ -109,6 +109,7 @@ export const login = async (req, res) => {
       fullName: user.fullName,
       email: user.email,
       profilePic: user.profilePic,
+      publicKey: user.publicKey || null,
     });
   } catch (error) {
     if (error.name === "CastError") {
@@ -158,6 +159,7 @@ export const verifyEmail = async (req, res) => {
       fullName: user.fullName,
       email: user.email,
       profilePic: user.profilePic,
+      publicKey: user.publicKey || null,
     });
   } catch (error) {
     if (error.name === "CastError") {
@@ -241,6 +243,7 @@ export const updateProfile = async (req, res) => {
       fullName: updatedUser.fullName,
       email: updatedUser.email,
       profilePic: updatedUser.profilePic,
+      publicKey: updatedUser.publicKey || null,
     });
   } catch (error) {
     if (error.name === "ValidationError") {
@@ -322,6 +325,46 @@ export const resetPassword = async (req, res) => {
       return res.status(400).json({ message: "Invalid ID format" });
     }
     logger.error({ error: error.message }, "Error in resetPassword");
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// ---------------------------------------------------------------------------
+// Publish E2EE public key — PUT /api/auth/publish-key  (protected)
+// body: { publicKey: base64String }
+//
+// The client calls this after generating (or regenerating) its X25519 keypair.
+// Only the PUBLIC key travels to the server; the private key stays in IndexedDB.
+// ---------------------------------------------------------------------------
+export const publishPublicKey = async (req, res) => {
+  try {
+    const { publicKey } = req.body;
+    if (!publicKey || typeof publicKey !== "string" || publicKey.trim().length === 0) {
+      return res.status(400).json({ message: "publicKey is required and must be a non-empty string" });
+    }
+    if (publicKey.length > 100) {
+      return res.status(400).json({ message: "publicKey exceeds maximum allowed length" });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id,
+      { publicKey: publicKey.trim() },
+      { new: true }
+    );
+
+    res.status(200).json({
+      _id: updatedUser._id,
+      fullName: updatedUser.fullName,
+      email: updatedUser.email,
+      profilePic: updatedUser.profilePic,
+      publicKey: updatedUser.publicKey,
+    });
+  } catch (error) {
+    if (error.name === "ValidationError") {
+      const messages = Object.values(error.errors).map((val) => val.message);
+      return res.status(400).json({ message: messages.join(", ") });
+    }
+    logger.error({ error: error.message }, "Error in publishPublicKey");
     res.status(500).json({ message: "Internal server error" });
   }
 };

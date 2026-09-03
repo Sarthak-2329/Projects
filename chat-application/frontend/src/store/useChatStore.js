@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { axiosInstance } from '../lib/axios';
 import toast from 'react-hot-toast';
 import { useAuthStore } from './useAuthStore';
+import { getMyPrivateKey, importPublicKey, deriveSharedKey, encryptMessage } from '../lib/crypto';
 
 // Map of typing timeouts per user to guarantee cleanup on unexpected disconnect
 const typingTimeouts = new Map();
@@ -294,7 +295,7 @@ export const useChatStore = create((set, get) => ({
       _id: tempId,
       senderId: authUser._id,
       receiverId: selectedUser._id,
-      text: data.text,
+      text: data.text,          // show plaintext optimistically in sender's UI
       image: data.image,
       createdAt: new Date().toISOString(),
       status: 'sending',
@@ -303,12 +304,30 @@ export const useChatStore = create((set, get) => ({
     set((state) => ({ messages: [...state.messages, optimisticMessage] }));
 
     try {
-      const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, data);
+      // Attempt E2EE encryption if both parties have published public keys
+      let payload = { text: data.text, image: data.image };
+
+      const myPrivateKey    = getMyPrivateKey();
+      const theirPublicKeyB64 = selectedUser.publicKey;
+
+      if (myPrivateKey && theirPublicKeyB64 && data.text) {
+        try {
+          const theirPublicKey = await importPublicKey(theirPublicKeyB64);
+          const sharedKey      = await deriveSharedKey(myPrivateKey, theirPublicKey);
+          const { ciphertext, iv } = await encryptMessage(sharedKey, data.text);
+          payload = { encryptedText: ciphertext, iv, image: data.image };
+        } catch (cryptoErr) {
+          // Encryption failed — fall back to plaintext so the message is never lost
+          console.warn('E2EE encrypt failed, sending plaintext:', cryptoErr);
+        }
+      }
+
+      const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, payload);
       const savedMessage = res.data.message;
       set((state) => ({
         messages: state.messages
           .filter((msg) => msg._id !== savedMessage._id || msg._id === tempId)
-          .map((msg) => (msg._id === tempId ? savedMessage : msg)),
+          .map((msg) => (msg._id === tempId ? { ...savedMessage, text: data.text } : msg)),
       }));
       get().getMyChatPartners();
     } catch (error) {
