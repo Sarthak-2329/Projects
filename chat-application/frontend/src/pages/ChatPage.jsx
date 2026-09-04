@@ -1,4 +1,3 @@
-import React from 'react';
 import BorderAnimatedContainer from "../components/BorderAnimatedContainer";
 import { useChatStore } from '../store/useChatStore';
 import ProfileHeader from '../components/ProfileHeader';
@@ -18,14 +17,10 @@ function ChatPage() {
         <BorderAnimatedContainer>
           <div className="w-full h-full flex glass-card rounded-2xl sm:rounded-3xl overflow-hidden">
 
-            {/*
-              Left column — sidebar
-              Mobile  : full-width, visible only when NO conversation is open
-              Desktop : fixed 240px (260px on xl), always visible
-            */}
+            {/* Left column — sidebar */}
             <div
               className={[
-                'flex-col bg-slate-900/75 border-r border-slate-800/70 backdrop-blur-xl',
+                'flex-col bg-cream border-r border-ink/10',
                 'w-full md:w-[240px] xl:w-[260px]',
                 activeConversation ? 'hidden md:flex' : 'flex',
               ].join(' ')}
@@ -37,14 +32,10 @@ function ChatPage() {
               </div>
             </div>
 
-            {/*
-              Right column — conversation pane
-              Mobile  : full-width, visible only when a conversation IS open
-              Desktop : flex-1, always visible
-            */}
+            {/* Right column — conversation pane */}
             <div
               className={[
-                'flex-col bg-slate-950/80 flex-1',
+                'flex-col bg-oat flex-1',
                 activeConversation ? 'flex' : 'hidden md:flex',
               ].join(' ')}
             >

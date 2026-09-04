@@ -8,55 +8,65 @@
   syntax: "<angle>";
 }
 
+/* Base reset — apply warm font and ink text colour everywhere */
+@layer base {
+  html {
+    font-family: "Public Sans", system-ui, sans-serif;
+    color: #2B2620;
+  }
+}
+
+/* ── Page-level shell ─────────────────────────────────────────────────────── */
 .body-gradient {
-  @apply min-h-screen bg-slate-950 text-slate-100;
-  background-image:
-    radial-gradient(circle at top left, rgba(94, 234, 212, 0.16), transparent 55%),
-    radial-gradient(circle at bottom right, rgba(129, 140, 248, 0.20), transparent 60%),
-    radial-gradient(circle at center, rgba(15, 23, 42, 0.96), rgba(15, 23, 42, 1));
+  @apply min-h-screen bg-oat text-ink font-sans;
 }
 
+/* ── Card surface ─────────────────────────────────────────────────────────── */
+/* Replaced heavy backdrop-blur glass-card with a warm paper treatment */
 .glass-card {
-  @apply bg-slate-900/75 border border-slate-700/70 shadow-[0_24px_60px_rgba(15,23,42,0.95)] backdrop-blur-2xl;
+  @apply bg-cream border border-ink/10 shadow-[0_8px_32px_rgba(43,38,32,0.10)];
 }
 
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
 .subtle-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(148, 163, 184, 0.7) transparent;
+  scrollbar-color: rgba(63, 93, 69, 0.30) transparent;
 }
-.subtle-scroll::-webkit-scrollbar {
-  width: 6px;
-}
-.subtle-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
+.subtle-scroll::-webkit-scrollbar       { width: 5px; }
+.subtle-scroll::-webkit-scrollbar-track { background: transparent; }
 .subtle-scroll::-webkit-scrollbar-thumb {
-  background-color: rgba(148, 163, 184, 0.6);
+  background-color: rgba(63, 93, 69, 0.25);
   border-radius: 999px;
 }
 
+/* ── Auth form helpers ────────────────────────────────────────────────────── */
 .input {
-  @apply w-full bg-slate-800/50 border border-slate-700 rounded-lg py-2 pl-10 pr-4 text-slate-200 placeholder-slate-400 focus:ring-2 focus:ring-cyan-500 focus:border-transparent;
+  @apply w-full bg-oat border border-ink/20 rounded-lg py-2 pl-10 pr-4
+         text-ink placeholder-ink/40
+         focus:ring-2 focus:ring-forest focus:border-transparent
+         outline-none transition;
 }
 
 .auth-input-icon {
-  @apply absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 size-5;
+  @apply absolute left-3 top-1/2 -translate-y-1/2 text-ink/40 size-5;
 }
 
 .auth-input-label {
-  @apply block text-sm font-medium text-slate-300 mb-2;
+  @apply block text-sm font-medium text-ink/70 mb-2;
 }
 
 .auth-badge {
-  @apply inline-flex items-center px-3 py-1 text-xs font-medium rounded-full bg-cyan-500/20 text-cyan-300;
+  @apply inline-flex items-center px-3 py-1 text-xs font-medium rounded-full
+         bg-forest/10 text-forest;
 }
 
 .auth-btn {
-  @apply w-full bg-cyan-500 text-white rounded-lg py-2.5 font-medium
-  hover:bg-cyan-600 focus:ring-2 focus:ring-cyan-500;
+  @apply w-full bg-forest text-cream rounded-lg py-2.5 font-medium
+         hover:bg-forest/90 focus:ring-2 focus:ring-forest focus:ring-offset-2
+         focus:ring-offset-cream transition disabled:opacity-50 disabled:cursor-not-allowed;
 }
 
 .auth-link {
-  @apply px-4 py-2 inline-block bg-cyan-500/10 rounded-lg text-cyan-400
-  hover:text-cyan-500 text-sm transition-colors;
+  @apply px-4 py-2 inline-block bg-forest/10 rounded-lg text-forest
+         hover:bg-forest/20 text-sm transition-colors;
 }

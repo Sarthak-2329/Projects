@@ -8,10 +8,6 @@ function LoginPage() {
   const { login, isLoggingIn, resendVerification, isResendingVerification } = useAuthStore();
 
   const [formData, setFormData] = useState({ email: "", password: "" });
-  /**
-   * Set to the user's email when the backend returns EMAIL_UNVERIFIED.
-   * Causes a notice banner with a resend link to appear above the form.
-   */
   const [unverifiedEmail, setUnverifiedEmail] = useState("");
 
   const handleSubmit = async (e) => {
@@ -25,25 +21,25 @@ function LoginPage() {
 
   return (
     <AuthBackground>
-      <div className="relative w-[420px] backdrop-blur-xl bg-white/5 border border-white/20 rounded-3xl p-10 shadow-2xl">
+      <div className="relative w-[420px] bg-cream border border-ink/12 rounded-3xl p-10 shadow-[0_8px_40px_rgba(43,38,32,0.12)]">
 
-        <h1 className="text-3xl font-semibold text-center text-white mb-8">
+        <h1 className="font-serif text-3xl font-semibold text-center text-ink mb-8">
           Sign In
         </h1>
 
         {/* Email-unverified notice */}
         {unverifiedEmail && (
-          <div className="mb-5 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-sm">
-            <p className="text-amber-300 mb-2">
+          <div className="mb-5 p-4 rounded-xl bg-ochre/10 border border-ochre/30 text-sm">
+            <p className="text-ochre mb-2">
               <span className="font-medium">Email not verified.</span> Please check your inbox for the verification link.
             </p>
             <button
               type="button"
               disabled={isResendingVerification}
               onClick={() => resendVerification(unverifiedEmail)}
-              className="text-cyan-400 hover:underline disabled:opacity-50 text-xs"
+              className="text-forest hover:underline disabled:opacity-50 text-xs"
             >
-              {isResendingVerification ? "Sending…" : "Resend verification email →"}
+              {isResendingVerification ? "Sending…" : "Resend verification email"}
             </button>
           </div>
         )}
@@ -51,43 +47,43 @@ function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-5">
 
           <div className="relative">
-            <Mail className="absolute left-3 top-3.5 text-gray-400 size-5" />
+            <Mail className="absolute left-3 top-3.5 text-ink/40 size-5" />
             <input
               type="email"
               placeholder="Email"
               value={formData.email}
-              onChange={(e)=>setFormData({...formData,email:e.target.value})}
-              className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="w-full pl-10 pr-4 py-3 rounded-xl bg-oat border border-ink/20 text-ink placeholder-ink/40 focus:outline-none focus:ring-2 focus:ring-forest transition"
             />
           </div>
 
           <div className="relative">
-            <Lock className="absolute left-3 top-3.5 text-gray-400 size-5" />
+            <Lock className="absolute left-3 top-3.5 text-ink/40 size-5" />
             <input
               type="password"
               placeholder="Password"
               value={formData.password}
-              onChange={(e)=>setFormData({...formData,password:e.target.value})}
-              className="w-full pl-10 pr-4 py-3 rounded-xl bg-white/10 border border-white/20 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-400"
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              className="w-full pl-10 pr-4 py-3 rounded-xl bg-oat border border-ink/20 text-ink placeholder-ink/40 focus:outline-none focus:ring-2 focus:ring-forest transition"
             />
           </div>
 
           <div className="text-right -mt-2">
-            <Link to="/forgot-password" className="text-cyan-400 text-sm hover:underline">
+            <Link to="/forgot-password" className="text-forest text-sm hover:underline">
               Forgot password?
             </Link>
           </div>
 
           <button
             disabled={isLoggingIn}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:opacity-90 transition shadow-lg"
+            className="w-full py-3 rounded-xl bg-forest text-cream font-medium hover:bg-forest/90 transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isLoggingIn ? "Signing in…" : "Login"}
           </button>
 
-          <p className="text-center text-gray-400 text-sm">
-            Don't have an account?
-            <Link to="/signup" className="text-cyan-400 ml-1 hover:underline">
+          <p className="text-center text-ink/50 text-sm">
+            Don't have an account?{
+            }<Link to="/signup" className="text-forest ml-1 hover:underline">
               Sign up
             </Link>
           </p>

@@ -8,13 +8,6 @@ import MessageInput from './MessageInput';
 import MessagesLoadingSkeleton from './MessagesLoadingSkeleton';
 import { getMyPrivateKey, importPublicKey, deriveSharedKey, decryptMessage } from '../lib/crypto';
 
-/**
- * Derives the shared ECDH key for the active DM partner and decrypts all
- * messages that carry encryptedText + iv.
- *
- * Returns a Map<messageId, decryptedText|null> where null means decryption
- * failed (wrong key, corrupted data, or key lost after storage clear).
- */
 function useDecryptedMessages(messages, partnerPublicKeyB64) {
   const [decryptedMap, setDecryptedMap] = useState(new Map());
 
@@ -23,16 +16,10 @@ function useDecryptedMessages(messages, partnerPublicKeyB64) {
 
     async function run() {
       const myPrivateKey = getMyPrivateKey();
-      if (!myPrivateKey || !partnerPublicKeyB64) {
-        setDecryptedMap(new Map());
-        return;
-      }
+      if (!myPrivateKey || !partnerPublicKeyB64) { setDecryptedMap(new Map()); return; }
 
       const encryptedMsgs = messages.filter((m) => m.encryptedText && m.iv);
-      if (encryptedMsgs.length === 0) {
-        setDecryptedMap(new Map());
-        return;
-      }
+      if (encryptedMsgs.length === 0) { setDecryptedMap(new Map()); return; }
 
       let sharedKey;
       try {
@@ -50,9 +37,7 @@ function useDecryptedMessages(messages, partnerPublicKeyB64) {
         })
       );
 
-      if (!cancelled) {
-        setDecryptedMap(new Map(entries));
-      }
+      if (!cancelled) setDecryptedMap(new Map(entries));
     }
 
     run();
@@ -78,21 +63,13 @@ function ChatContainer() {
   const { authUser } = useAuthStore();
   const messageEndRef = useRef(null);
   const scrollContainerRef = useRef(null);
-
   const [lightboxUrl, setLightboxUrl] = useState(null);
 
-  // Decrypt encrypted DM messages — runs whenever messages or the partner's public key changes.
-  // Only active for 1:1 DMs (selectedUser); group messages are not encrypted.
-  const decryptedMap = useDecryptedMessages(
-    messages,
-    selectedUser?.publicKey ?? null
-  );
+  const decryptedMap = useDecryptedMessages(messages, selectedUser?.publicKey ?? null);
 
   useEffect(() => {
     if (!lightboxUrl) return;
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') setLightboxUrl(null);
-    };
+    const handleKeyDown = (e) => { if (e.key === 'Escape') setLightboxUrl(null); };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [lightboxUrl]);
@@ -102,11 +79,9 @@ function ChatContainer() {
     if (!container) return;
     if (container.scrollTop < 50 && hasMoreMessages && !isLoadingMore) {
       const prevScrollHeight = container.scrollHeight;
-
       const loadMoreAction = selectedGroup
         ? loadMoreGroupMessages(selectedGroup._id)
         : loadMoreMessages(selectedUser._id);
-
       loadMoreAction.then(() => {
         requestAnimationFrame(() => {
           if (scrollContainerRef.current) {
@@ -124,19 +99,14 @@ function ChatContainer() {
       useAuthStore.getState().clearUnread(selectedGroup._id);
     } else if (selectedUser) {
       getMessagesByUserId(selectedUser._id);
-
       const socket = useAuthStore.getState().socket;
-      if (socket) {
-        socket.emit('messageRead', { senderId: selectedUser._id });
-      }
+      if (socket) socket.emit('messageRead', { senderId: selectedUser._id });
       useAuthStore.getState().clearUnread(selectedUser._id);
     }
   }, [selectedUser, selectedGroup, getMessagesByUserId, getGroupMessages]);
 
   useEffect(() => {
-    if (messageEndRef.current) {
-      messageEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
+    if (messageEndRef.current) messageEndRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
   const isGroup = Boolean(selectedGroup);
@@ -148,10 +118,10 @@ function ChatContainer() {
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 px-4 md:px-6 overflow-y-auto py-6 subtle-scroll bg-gradient-to-b from-slate-950/40 via-slate-950/80 to-slate-950"
+        className="flex-1 px-4 md:px-6 overflow-y-auto py-6 subtle-scroll bg-oat"
       >
         {messages.length > 0 && !isMessagesLoading ? (
-          <div className="w-full space-y-4 md:space-y-6">
+          <div className="w-full space-y-4 md:space-y-5">
             {messages.map((msg) => {
               const senderId = msg.senderId?._id || msg.senderId;
               const isMine = senderId?.toString() === authUser?._id?.toString();
@@ -163,23 +133,23 @@ function ChatContainer() {
                   key={msg._id}
                   className={`flex w-full items-end gap-2.5 ${isMine ? 'justify-end' : 'justify-start'}`}
                 >
-                  {/* Sender avatar for incoming messages in group chats */}
+                  {/* Sender avatar — group incoming only */}
                   {isGroup && !isMine && (
-                    <div className="w-7 h-7 rounded-full overflow-hidden shrink-0 mb-1 border border-slate-700">
+                    <div className="w-7 h-7 rounded-full overflow-hidden shrink-0 mb-1 border border-ink/15">
                       <img src={senderPic} alt={senderName} className="w-full h-full object-cover" />
                     </div>
                   )}
 
                   <div
-                    className={`relative shadow-lg max-w-[80%] md:max-w-[70%] px-4 py-3 ${
+                    className={`relative max-w-[80%] md:max-w-[70%] px-4 py-3 ${
                       isMine
-                        ? 'rounded-2xl rounded-br-sm bg-gradient-to-r from-cyan-500 to-cyan-600 text-white'
-                        : 'rounded-2xl rounded-bl-sm bg-slate-900 text-slate-100 border border-slate-800/90'
+                        ? 'rounded-2xl rounded-br-sm bg-forest text-cream shadow-[0_2px_8px_rgba(63,93,69,0.25)]'
+                        : 'rounded-2xl rounded-bl-sm bg-cream text-ink border border-ink/10 shadow-[0_2px_6px_rgba(43,38,32,0.08)]'
                     }`}
                   >
-                    {/* Display sender's name on group messages */}
+                    {/* Sender name — group incoming */}
                     {isGroup && !isMine && (
-                      <p className="text-[11px] font-semibold text-cyan-400 mb-1 leading-none">
+                      <p className="font-serif text-[11px] font-semibold text-forest mb-1 leading-none">
                         {senderName}
                       </p>
                     )}
@@ -189,51 +159,37 @@ function ChatContainer() {
                         src={msg.image}
                         alt="Shared"
                         onClick={() => setLightboxUrl(msg.image)}
-                        className="rounded-lg h-48 object-cover mb-1 border border-slate-800/80 cursor-pointer hover:opacity-90 transition-opacity"
+                        className="rounded-lg h-48 object-cover mb-1 border border-ink/10 cursor-pointer hover:opacity-90 transition-opacity"
                       />
                     )}
 
-                    {/* Message text — decrypt if encrypted, otherwise render plaintext */}
+                    {/* Message text */}
                     {msg.encryptedText ? (
                       (() => {
-                        // msg.text may hold the optimistic plaintext the sender set locally
                         const resolved = decryptedMap.get(msg._id) ?? msg.text ?? null;
-                        if (resolved) {
-                          return <p className="mt-1 leading-relaxed">{resolved}</p>;
-                        }
+                        if (resolved) return <p className="mt-1 leading-relaxed text-sm">{resolved}</p>;
                         return (
-                          <p className="mt-1 leading-relaxed text-slate-400 italic text-sm">
+                          <p className="mt-1 leading-relaxed text-sm opacity-60 italic">
                             🔒 Encrypted
                           </p>
                         );
                       })()
                     ) : (
-                      msg.text && <p className="mt-1 leading-relaxed">{msg.text}</p>
+                      msg.text && <p className="mt-1 leading-relaxed text-sm">{msg.text}</p>
                     )}
 
-
-                    <p className="text-[11px] mt-1.5 opacity-75 flex items-center gap-1 text-slate-300">
+                    <p className={`text-[11px] mt-1.5 flex items-center gap-1 ${
+                      isMine ? 'opacity-70 text-cream' : 'opacity-50 text-ink'
+                    }`}>
                       {new Date(msg.createdAt).toLocaleTimeString(undefined, {
                         hour: '2-digit',
                         minute: '2-digit',
                       })}
                       {isMine && (
-                        <span
-                          className={`ml-1 ${
-                            msg.status === 'read'
-                              ? 'text-blue-400'
-                              : msg.status === 'delivered'
-                              ? 'text-gray-400'
-                              : 'text-gray-500'
-                          }`}
-                        >
-                          {msg.status === 'read'
-                            ? '✓✓'
-                            : msg.status === 'delivered'
-                            ? '✓✓'
-                            : msg.status === 'sending'
-                            ? '◌'
-                            : '✓'}
+                        <span className={`ml-1 ${
+                          msg.status === 'read' ? 'text-cream/90' : 'text-cream/60'
+                        }`}>
+                          {msg.status === 'read' ? '✓✓' : msg.status === 'delivered' ? '✓✓' : msg.status === 'sending' ? '◌' : '✓'}
                         </span>
                       )}
                     </p>
@@ -241,7 +197,6 @@ function ChatContainer() {
                 </div>
               );
             })}
-            {/* scroll target */}
             <div ref={messageEndRef} />
           </div>
         ) : isMessagesLoading ? (
@@ -253,10 +208,10 @@ function ChatContainer() {
 
       <MessageInput />
 
-      {/* Lightbox overlay */}
+      {/* Lightbox */}
       {lightboxUrl && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/70 backdrop-blur-sm"
           onClick={() => setLightboxUrl(null)}
         >
           <img
@@ -268,12 +223,12 @@ function ChatContainer() {
           <button
             type="button"
             onClick={() => setLightboxUrl(null)}
-            className="absolute top-4 right-4 inline-flex items-center justify-center w-9 h-9 rounded-full bg-slate-900/80 border border-slate-700 text-slate-200 hover:bg-slate-800 transition-colors"
+            className="absolute top-4 right-4 inline-flex items-center justify-center w-9 h-9 rounded-full bg-cream/90 border border-ink/15 text-ink hover:bg-cream transition-colors"
             aria-label="Close"
           >
             <XIcon className="w-4 h-4" />
           </button>
-          <p className="absolute bottom-4 text-slate-400 text-xs">
+          <p className="absolute bottom-4 text-cream/60 text-xs">
             Click outside or press Esc to close
           </p>
         </div>
