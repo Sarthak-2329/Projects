@@ -142,6 +142,11 @@ export const useChatStore = create((set, get) => ({
       hasMoreMessages: true,
       isLoadingMore: false,
     });
+
+    // Clear the unread badge for this group the moment it is opened
+    if (selectedGroup) {
+      useAuthStore.getState().clearUnread(selectedGroup._id);
+    }
   },
 
   closeChat: () => {

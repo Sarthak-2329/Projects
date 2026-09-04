@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Users } from 'lucide-react';
 import { useChatStore } from '../store/useChatStore';
 import UsersLoadingSkeleton from './UsersLoadingSkeleton';
@@ -82,6 +82,7 @@ function ChatsList() {
         if (item.type === 'group') {
           const group = item.data;
           const isSelected = selectedGroup?._id === group._id;
+          const groupUnread = unreadMessages[group._id] || 0;
 
           let preview = '';
           if (group.lastMessage?.image && !group.lastMessage?.text) {
@@ -102,7 +103,10 @@ function ChatsList() {
             <button
               key={`group_${group._id}`}
               type="button"
-              onClick={() => setSelectedGroup(group)}
+              onClick={() => {
+                setSelectedGroup(group);
+                clearUnread(group._id);
+              }}
               className={`w-full text-left group rounded-xl px-3.5 py-3 transition-all border ${
                 isSelected
                   ? 'bg-slate-800/90 border-cyan-500/70 shadow-md shadow-cyan-500/5'
@@ -128,13 +132,20 @@ function ChatsList() {
                         {group.members?.length || 0}
                       </span>
                     </div>
-                    {lastTime && (
-                      <span className="text-[10px] text-slate-500 group-hover:text-cyan-300 shrink-0">
-                        {formatRelativeTime(lastTime)}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {groupUnread > 0 && (
+                        <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold text-white bg-cyan-500 rounded-full">
+                          {groupUnread}
+                        </span>
+                      )}
+                      {lastTime && (
+                        <span className="text-[10px] text-slate-500 group-hover:text-cyan-300">
+                          {formatRelativeTime(lastTime)}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <p className="mt-0.5 text-xs truncate text-slate-400">
+                  <p className={`mt-0.5 text-xs truncate ${groupUnread > 0 ? 'text-slate-200 font-medium' : 'text-slate-400'}`}>
                     {preview || 'Tap to open group conversation'}
                   </p>
                 </div>

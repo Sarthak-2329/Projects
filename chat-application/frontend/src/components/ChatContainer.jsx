@@ -121,6 +121,7 @@ function ChatContainer() {
   useEffect(() => {
     if (selectedGroup) {
       getGroupMessages(selectedGroup._id);
+      useAuthStore.getState().clearUnread(selectedGroup._id);
     } else if (selectedUser) {
       getMessagesByUserId(selectedUser._id);
 

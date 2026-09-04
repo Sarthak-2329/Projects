@@ -275,10 +275,22 @@ io.on("connection", async (socket) => {
     logger.error({ error: err.message }, "Error finalizing socket connection");
   }
 
-  // Dynamic group room joining (e.g. after group creation)
-  socket.on("joinGroup", ({ conversationId }) => {
-    if (conversationId) {
-      socket.join(`group:${conversationId}`);
+  // Dynamic group room joining (e.g. after group creation).
+  // Membership is verified before joining — an unverified client that emits
+  // this event cannot receive messages for a group it does not belong to.
+  socket.on("joinGroup", async ({ conversationId }) => {
+    if (!conversationId) return;
+    try {
+      const conversation = await Conversation.findById(conversationId).select("members");
+      if (!conversation) return;
+      const isMember = conversation.members.some((m) => m.userId.equals(userId));
+      if (isMember) {
+        socket.join(`group:${conversationId}`);
+      }
+      // Silently ignore non-members — don't emit an error that would let clients
+      // enumerate valid conversation IDs by probing for different responses.
+    } catch (err) {
+      logger.warn({ error: err.message, userId, conversationId }, "joinGroup membership check failed");
     }
   });
 

@@ -24,9 +24,13 @@ export const createGroup = async (req, res) => {
       new Set(memberIds.map((id) => id.toString()).filter((id) => id !== creatorId.toString()))
     );
 
-    // Verify all specified members exist
+    // Verify all specified members exist and have verified email addresses
     const existingUsers = await User.find({ _id: { $in: uniqueMemberIds }, isEmailVerified: true }).select('_id');
     const validMemberIds = existingUsers.map((u) => u._id);
+    const validMemberIdStrings = new Set(validMemberIds.map((id) => id.toString()));
+
+    // Collect skipped IDs so the creator knows who was not added and why
+    const skippedMemberIds = uniqueMemberIds.filter((id) => !validMemberIdStrings.has(id.toString()));
 
     const membersList = [
       { userId: creatorId, role: 'admin', joinedAt: new Date() },
@@ -50,7 +54,10 @@ export const createGroup = async (req, res) => {
       io.to(`user:${member.userId.toString()}`).emit('groupCreated', populatedConversation);
     }
 
-    res.status(201).json(populatedConversation);
+    res.status(201).json({
+      ...populatedConversation.toObject(),
+      skipped: skippedMemberIds,
+    });
   } catch (error) {
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map((val) => val.message);
@@ -245,14 +252,45 @@ export const leaveGroup = async (req, res) => {
       return res.status(400).json({ message: 'You are not a member of this group' });
     }
 
+    const leavingMember = conversation.members[memberIndex];
     conversation.members.splice(memberIndex, 1);
+
+    // Case A: no one left — clean up the conversation and all its messages
+    if (conversation.members.length === 0) {
+      await Message.deleteMany({ conversationId });
+      await Conversation.findByIdAndDelete(conversationId);
+
+      io.to(`group:${conversationId}`).emit('memberLeftGroup', {
+        conversationId,
+        userId,
+        remainingMembers: 0,
+        promotedAdmin: null,
+      });
+
+      return res.status(200).json({ message: 'Left group successfully' });
+    }
+
+    // Case B: leaving member was the last admin — promote the longest-tenured member
+    let promotedAdmin = null;
+    const isAdmin = leavingMember.role === 'admin';
+    const hasRemainingAdmin = conversation.members.some((m) => m.role === 'admin');
+
+    if (isAdmin && !hasRemainingAdmin) {
+      // Sort ascending by joinedAt; pick the earliest (most senior) member
+      const oldest = conversation.members.slice().sort(
+        (a, b) => new Date(a.joinedAt) - new Date(b.joinedAt)
+      )[0];
+      oldest.role = 'admin';
+      promotedAdmin = oldest.userId;
+    }
+
     await conversation.save();
 
-    // Notify remaining group members
     io.to(`group:${conversationId}`).emit('memberLeftGroup', {
       conversationId,
       userId,
       remainingMembers: conversation.members.length,
+      promotedAdmin: promotedAdmin ? promotedAdmin.toString() : null,
     });
 
     res.status(200).json({ message: 'Left group successfully' });
@@ -264,3 +302,4 @@ export const leaveGroup = async (req, res) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 };
+

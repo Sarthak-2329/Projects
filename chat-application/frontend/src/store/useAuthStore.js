@@ -270,15 +270,23 @@ export const useAuthStore = create((set,get)=>({
         socket.on("newGroupMessage", ({ message, conversationId }) => {
             const { selectedGroup } = useChatStore.getState();
             const selectedGroupId = selectedGroup?._id?.toString();
+            const senderId = message.senderId?._id || message.senderId;
 
             if (selectedGroupId && selectedGroupId === conversationId?.toString()) {
                 useChatStore.getState().addIncomingMessage(message);
+            } else if (senderId?.toString() !== authUser._id?.toString()) {
+                // Only badge when it's someone else's message and the group isn't open
+                set((state) => ({
+                    unreadMessages: {
+                        ...state.unreadMessages,
+                        [conversationId]: (state.unreadMessages[conversationId] || 0) + 1,
+                    },
+                }));
             }
 
             useChatStore.getState().getGroups();
 
             const { isSoundEnabled } = useChatStore.getState();
-            const senderId = message.senderId?._id || message.senderId;
             if (isSoundEnabled && senderId?.toString() !== authUser._id?.toString()) {
                 const notificationSound = new Audio("/sounds/notification.mp3");
                 notificationSound.currentTime = 0;

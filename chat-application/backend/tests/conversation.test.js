@@ -123,6 +123,22 @@ describe('Group Conversations API (/api/conversations)', () => {
       expect(res.status).toBe(400);
       expect(res.body.message).toMatch(/member/i);
     });
+
+    it('reports skipped IDs for non-existent or unverified members', async () => {
+      const fakeId = new (await import('mongoose')).default.Types.ObjectId().toString();
+
+      const res = await agent1.post('/api/conversations').send({
+        name: 'Partial Group',
+        members: [user2._id.toString(), fakeId],
+      });
+
+      expect(res.status).toBe(201);
+      // user2 should be added; fakeId should be skipped
+      const memberIds = res.body.members.map((m) => m.userId._id);
+      expect(memberIds).toContain(user2._id.toString());
+      expect(res.body.skipped).toBeDefined();
+      expect(res.body.skipped).toContain(fakeId);
+    });
   });
 
   describe('GET /api/conversations (getUserGroups)', () => {
@@ -212,6 +228,59 @@ describe('Group Conversations API (/api/conversations)', () => {
       // Verify user2 can no longer access messages
       const accessRes = await agent2.get(`/api/conversations/${groupId}/messages`);
       expect(accessRes.status).toBe(403);
+    });
+
+    it('deletes the conversation and its messages when the last member leaves', async () => {
+      // Create a group with only user1 as the sole member (beyond the creator)
+      const createRes = await agent1.post('/api/conversations').send({
+        name: 'Solo Group',
+        members: [user2._id.toString()],
+      });
+      const groupId = createRes.body._id;
+
+      // user2 leaves first
+      await agent2.post(`/api/conversations/${groupId}/leave`).send();
+
+      // user1 (last member) leaves — should trigger deletion
+      const leaveRes = await agent1.post(`/api/conversations/${groupId}/leave`).send();
+      expect(leaveRes.status).toBe(200);
+
+      // Conversation document should no longer exist
+      const conv = await Conversation.findById(groupId);
+      expect(conv).toBeNull();
+
+      // All messages in the conversation should be deleted too
+      const msgs = await Message.find({ conversationId: groupId });
+      expect(msgs).toHaveLength(0);
+    });
+
+    it('promotes the longest-tenured member to admin when the last admin leaves a non-empty group', async () => {
+      // Create a 3rd user to have two non-admin members
+      const session3 = await createVerifiedUserAndSession({
+        fullName: 'User Three',
+        email: 'user3-admin-promo@test.com',
+        password: 'password123',
+      });
+      const user3 = session3.user;
+
+      const createRes = await agent1.post('/api/conversations').send({
+        name: 'Admin Promo Group',
+        members: [user2._id.toString(), user3._id.toString()],
+      });
+      const groupId = createRes.body._id;
+
+      // user1 is the sole admin; they leave
+      const leaveRes = await agent1.post(`/api/conversations/${groupId}/leave`).send();
+      expect(leaveRes.status).toBe(200);
+
+      // Conversation should still exist
+      const conv = await Conversation.findById(groupId);
+      expect(conv).not.toBeNull();
+      expect(conv.members).toHaveLength(2);
+
+      // Exactly one admin should exist among remaining members
+      const admins = conv.members.filter((m) => m.role === 'admin');
+      expect(admins).toHaveLength(1);
     });
   });
 });
