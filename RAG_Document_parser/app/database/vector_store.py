@@ -1,6 +1,6 @@
 import os
 import chromadb
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 # Define the persistent directory relative to the project root
 CHROMA_DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "data", "chroma_db")
@@ -13,16 +13,31 @@ class VectorStore:
         self.collection = self.client.get_or_create_collection(name=collection_name)
 
     def add_chunks(self, ids: List[str], embeddings: List[List[float]], documents: List[str], metadatas: List[Dict[str, Any]]):
-        """Adds a batch of chunks to the vector store."""
+        """
+        Adds a batch of chunks to the vector store.
+
+        Uses upsert() so that re-ingesting the same PDF is idempotent:
+        existing chunk IDs are overwritten in-place rather than duplicated or
+        raising an error.  Chunk IDs are deterministic ({source}_pN_cN), so
+        the same document always produces the same IDs.
+        """
         if not ids:
             return
-            
-        self.collection.add(
+
+        self.collection.upsert(
             ids=ids,
             embeddings=embeddings,
             documents=documents,
             metadatas=metadatas
         )
+
+    def count_chunks_for_document(self, document_id: str) -> int:
+        """Returns the number of chunks stored for a specific document."""
+        results = self.collection.get(
+            where={"source": document_id},
+            include=[]
+        )
+        return len(results.get("ids", []))
 
     def get_all_documents(self) -> List[Dict[str, Any]]:
         """
@@ -46,3 +61,62 @@ class VectorStore:
             doc_stats[source]["chunk_count"] += 1
             
         return list(doc_stats.values())
+
+    def query_chunks(
+        self,
+        query_embedding: List[float],
+        top_k: int = 5,
+        document_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Queries ChromaDB for the most similar chunks to the given embedding.
+
+        Args:
+            query_embedding: The embedding vector for the user's question.
+            top_k: Number of top results to return (default 5).
+            document_id: Optional filename to scope the search to a single document.
+
+        Returns:
+            A list of dicts, each containing:
+              - chunk_id: The unique ID of the chunk in ChromaDB.
+              - text: The chunk's text content.
+              - metadata: The stored metadata (source, page, chunk_index).
+              - distance: The similarity distance (lower = more similar).
+        """
+        # If the collection is empty, return early to avoid ChromaDB errors.
+        if self.collection.count() == 0:
+            return []
+
+        # Cap top_k to the actual number of stored chunks so ChromaDB
+        # doesn't complain about requesting more results than exist.
+        actual_count = self.collection.count()
+        effective_k = min(top_k, actual_count)
+
+        # Build an optional where-filter to scope results to a single document.
+        where_filter = {"source": document_id} if document_id else None
+
+        results = self.collection.query(
+            query_embeddings=[query_embedding],
+            n_results=effective_k,
+            where=where_filter,
+            include=["documents", "metadatas", "distances"]
+        )
+
+        # ChromaDB returns lists-of-lists (one inner list per query embedding).
+        # We only ever send one query embedding, so we unpack index 0.
+        ids = results.get("ids", [[]])[0]
+        documents = results.get("documents", [[]])[0]
+        metadatas = results.get("metadatas", [[]])[0]
+        distances = results.get("distances", [[]])[0]
+
+        chunks = []
+        for i in range(len(ids)):
+            chunks.append({
+                "chunk_id": ids[i],
+                "text": documents[i],
+                "metadata": metadatas[i],
+                "distance": distances[i]
+            })
+
+        return chunks
+
