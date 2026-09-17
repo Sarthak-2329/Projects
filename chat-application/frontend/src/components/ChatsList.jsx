@@ -1,9 +1,10 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Users } from 'lucide-react';
 import { useChatStore } from '../store/useChatStore';
 import UsersLoadingSkeleton from './UsersLoadingSkeleton';
 import NoChatsFound from './NoChatsFound';
 import { useAuthStore } from '../store/useAuthStore';
+import { getMyPrivateKey, importPublicKey, deriveSharedKey, decryptMessage } from '../lib/crypto';
 
 function formatRelativeTime(date) {
   if (!date) return '';
@@ -13,6 +14,48 @@ function formatRelativeTime(date) {
   if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
   if (diff < 604800) return new Date(date).toLocaleDateString(undefined, { weekday: 'short' });
   return new Date(date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+
+function useDecryptedPreviews(chats) {
+  const [decryptedPreviews, setDecryptedPreviews] = useState(new Map());
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function decryptAll() {
+      const myPrivateKey = getMyPrivateKey();
+      if (!myPrivateKey || !chats || chats.length === 0) return;
+
+      const results = await Promise.all(
+        chats.map(async (chat) => {
+          if (!chat.isEncrypted || !chat.lastMessageEncryptedText || !chat.lastMessageIv || !chat.publicKey) {
+            return null;
+          }
+          try {
+            const theirPublicKey = await importPublicKey(chat.publicKey);
+            const sharedKey = await deriveSharedKey(myPrivateKey, theirPublicKey);
+            const decrypted = await decryptMessage(sharedKey, chat.lastMessageEncryptedText, chat.lastMessageIv);
+            return [chat._id, decrypted];
+          } catch (e) {
+            return null;
+          }
+        })
+      );
+
+      if (isMounted) {
+        const valid = results.filter(Boolean);
+        setDecryptedPreviews(new Map(valid));
+      }
+    }
+
+    decryptAll();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [chats]);
+
+  return decryptedPreviews;
 }
 
 function ChatsList() {
@@ -27,8 +70,10 @@ function ChatsList() {
     selectedGroup,
     setSelectedUser,
     setSelectedGroup,
+    openAvatarModal,
   } = useChatStore();
   const { onlineUsers, unreadMessages, clearUnread, authUser } = useAuthStore();
+  const decryptedPreviews = useDecryptedPreviews(chats);
 
   useEffect(() => {
     getMyChatPartners();
@@ -94,7 +139,18 @@ function ChatsList() {
             >
               <div className="flex items-center gap-3">
                 <div className="relative shrink-0">
-                  <div className="w-12 h-12 rounded-full ring-1 ring-ink/15 bg-gradient-to-br from-forest/15 to-oat flex items-center justify-center text-forest overflow-hidden">
+                  <div
+                    className={`w-12 h-12 rounded-full ring-1 ring-ink/15 bg-gradient-to-br from-forest/15 to-oat flex items-center justify-center text-forest overflow-hidden ${
+                      group.avatar ? 'cursor-pointer hover:ring-forest/50 transition-all' : ''
+                    }`}
+                    onClick={(e) => {
+                      if (group.avatar) {
+                        e.stopPropagation();
+                        openAvatarModal(group.avatar, group.name);
+                      }
+                    }}
+                    title={group.avatar ? "View group photo" : undefined}
+                  >
                     {group.avatar ? (
                       <img src={group.avatar} alt={group.name} className="w-full h-full object-cover" />
                     ) : (
@@ -142,12 +198,22 @@ function ChatsList() {
         const unread = unreadMessages[chat._id] || 0;
 
         let preview = '';
-        if (chat.isEncrypted) preview = '🔒 Encrypted message';
-        else if (chat.lastMessageImage && !chat.lastMessageText) preview = '📷 Photo';
-        else if (chat.lastMessageText) preview = chat.lastMessageText;
+        const decryptedText = decryptedPreviews.get(chat._id);
+
+        if (decryptedText) {
+          preview = decryptedText;
+        } else if (chat.isEncrypted && !chat.lastMessageText) {
+          preview = '🔒 Encrypted message';
+        } else if (chat.lastMessageImage && !chat.lastMessageText) {
+          preview = '📷 Photo';
+        } else if (chat.lastMessageText) {
+          preview = chat.lastMessageText;
+        }
 
         const isMine = chat.lastMessageSenderId?.toString() === authUser?._id?.toString();
-        if (preview && isMine && !chat.isEncrypted) preview = `You: ${preview}`;
+        if (preview && isMine && preview !== '🔒 Encrypted message') {
+          preview = `You: ${preview}`;
+        }
 
         return (
           <button
@@ -162,8 +228,19 @@ function ChatsList() {
           >
             <div className="flex items-center gap-3">
               <div className="relative shrink-0">
-                <div className="w-12 h-12 rounded-full ring-1 ring-ink/15 ring-offset-2 ring-offset-cream overflow-hidden">
-                  <img src={chat.profilePic || '/avatar.png'} alt={chat.fullName} />
+                <div
+                  className="w-12 h-12 rounded-full ring-1 ring-ink/15 ring-offset-2 ring-offset-cream overflow-hidden cursor-pointer hover:ring-forest/50 transition-all"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openAvatarModal(chat.profilePic || '/avatar.png', chat.fullName);
+                  }}
+                  title="View profile photo"
+                >
+                  <img
+                    src={chat.profilePic || '/avatar.png'}
+                    alt={chat.fullName}
+                    className="w-full h-full object-cover"
+                  />
                 </div>
                 {isOnline && (
                   <span className="absolute bottom-0 right-0 w-3 h-3 bg-sage border-2 border-cream rounded-full" />

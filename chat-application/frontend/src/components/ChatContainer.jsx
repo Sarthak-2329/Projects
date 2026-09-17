@@ -59,6 +59,7 @@ function ChatContainer() {
     isLoadingMore,
     loadMoreMessages,
     loadMoreGroupMessages,
+    openAvatarModal,
   } = useChatStore();
   const { authUser } = useAuthStore();
   const messageEndRef = useRef(null);
@@ -135,7 +136,11 @@ function ChatContainer() {
                 >
                   {/* Sender avatar — group incoming only */}
                   {isGroup && !isMine && (
-                    <div className="w-7 h-7 rounded-full overflow-hidden shrink-0 mb-1 border border-ink/15">
+                    <div
+                      className="w-7 h-7 rounded-full overflow-hidden shrink-0 mb-1 border border-ink/15 cursor-pointer hover:ring-2 hover:ring-forest/50 transition-all"
+                      onClick={() => openAvatarModal(senderPic, senderName)}
+                      title={`View ${senderName}'s profile photo`}
+                    >
                       <img src={senderPic} alt={senderName} className="w-full h-full object-cover" />
                     </div>
                   )}

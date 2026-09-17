@@ -6,6 +6,7 @@ import ChatsList from '../components/ChatsList';
 import ContactList from '../components/ContactList';
 import ChatContainer from '../components/ChatContainer';
 import NoConversationPlaceholder from '../components/NoConversationPlaceholder';
+import AvatarModal from '../components/AvatarModal';
 
 function ChatPage() {
   const { activeTab, selectedUser, selectedGroup } = useChatStore();
@@ -21,7 +22,7 @@ function ChatPage() {
             <div
               className={[
                 'flex-col bg-cream border-r border-ink/10',
-                'w-full md:w-[240px] xl:w-[260px]',
+                'w-full md:w-[310px] xl:w-[340px]',
                 activeConversation ? 'hidden md:flex' : 'flex',
               ].join(' ')}
             >
@@ -45,6 +46,8 @@ function ChatPage() {
           </div>
         </BorderAnimatedContainer>
       </div>
+
+      <AvatarModal />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Mail, Lock, User } from "lucide-react";
+import { Mail, Lock, User, MessageSquare } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuthStore } from "../store/useAuthStore";
 import AuthBackground from "../components/AuthBackground";
@@ -62,7 +62,16 @@ function SignupPage() {
     <AuthBackground>
       <div className="relative w-[420px] bg-cream border border-ink/12 rounded-3xl p-10 shadow-[0_8px_40px_rgba(43,38,32,0.12)]">
 
-        <h1 className="font-serif text-3xl font-semibold text-center text-ink mb-8">
+        <div className="flex items-center justify-center gap-2 mb-3">
+          <Link to="/" className="inline-flex items-center gap-2 text-ink hover:opacity-80 transition-opacity">
+            <div className="w-8 h-8 rounded-xl bg-forest text-cream flex items-center justify-center shadow-sm">
+              <MessageSquare className="w-4 h-4 fill-cream/20" />
+            </div>
+            <span className="font-serif font-bold text-lg tracking-tight text-ink">Chatterbox</span>
+          </Link>
+        </div>
+
+        <h1 className="font-serif text-2xl font-semibold text-center text-ink mb-8">
           Create Account
         </h1>
 

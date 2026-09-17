@@ -11,6 +11,7 @@ function ChatHeader() {
     typingUsers,
     groupTyping,
     leaveGroup,
+    openAvatarModal,
   } = useChatStore();
   const { onlineUsers } = useAuthStore();
 
@@ -43,7 +44,17 @@ function ChatHeader() {
           </button>
 
           <div className="relative shrink-0">
-            <div className="w-10 h-10 md:w-11 md:h-11 rounded-full ring-1 ring-ink/15 bg-gradient-to-br from-forest/15 to-oat flex items-center justify-center text-forest overflow-hidden">
+            <div
+              className={`w-10 h-10 md:w-11 md:h-11 rounded-full ring-1 ring-ink/15 bg-gradient-to-br from-forest/15 to-oat flex items-center justify-center text-forest overflow-hidden ${
+                selectedGroup.avatar ? 'cursor-pointer hover:ring-forest/50 transition-all' : ''
+              }`}
+              onClick={() => {
+                if (selectedGroup.avatar) {
+                  openAvatarModal(selectedGroup.avatar, selectedGroup.name);
+                }
+              }}
+              title={selectedGroup.avatar ? "View group photo" : undefined}
+            >
               {selectedGroup.avatar ? (
                 <img src={selectedGroup.avatar} alt={selectedGroup.name} className="w-full h-full object-cover" />
               ) : (
@@ -108,9 +119,17 @@ function ChatHeader() {
           <ArrowLeft className="w-5 h-5" />
         </button>
 
-        <div className="relative">
-          <div className="w-10 h-10 md:w-11 md:h-11 rounded-full ring-1 ring-ink/15 ring-offset-2 ring-offset-cream overflow-hidden">
-            <img src={selectedUser.profilePic || '/avatar.png'} alt={selectedUser.fullName} />
+        <div
+          className="relative shrink-0 cursor-pointer group"
+          onClick={() => openAvatarModal(selectedUser.profilePic || '/avatar.png', selectedUser.fullName)}
+          title="View profile photo"
+        >
+          <div className="w-10 h-10 md:w-11 md:h-11 rounded-full ring-1 ring-ink/15 ring-offset-2 ring-offset-cream overflow-hidden group-hover:ring-forest/50 transition-all">
+            <img
+              src={selectedUser.profilePic || '/avatar.png'}
+              alt={selectedUser.fullName}
+              className="w-full h-full object-cover"
+            />
           </div>
           {isOnline && (
             <span className="absolute bottom-0 right-0 w-2.5 h-2.5 md:w-3 md:h-3 bg-sage border-2 border-cream rounded-full" />

@@ -24,7 +24,7 @@ function VerifyEmailPage() {
       if (attemptedTokenRef.current !== token) return;
       if (ok) {
         setStatus("success");
-        redirectTimerRef.current = setTimeout(() => navigate("/"), 1500);
+        redirectTimerRef.current = setTimeout(() => navigate("/chat"), 1500);
       } else {
         setStatus("error");
       }

@@ -214,6 +214,8 @@ export const getChatPartners = async (req, res) => {
         $group: {
           _id:                    "$partnerId",
           lastMessageText:        { $first: "$text" },
+          lastMessageEncryptedText: { $first: "$encryptedText" },
+          lastMessageIv:          { $first: "$iv" },
           lastMessageImage:       { $first: "$image" },
           lastMessageAt:          { $first: "$createdAt" },
           lastMessageSenderId:    { $first: "$senderId" },
@@ -242,6 +244,8 @@ export const getChatPartners = async (req, res) => {
           lastMessageText: {
             $cond: ["$lastMessageEncrypted", "$$REMOVE", "$lastMessageText"],
           },
+          lastMessageEncryptedText: 1,
+          lastMessageIv:       1,
           lastMessageImage:    1,
           lastMessageAt:       1,
           lastMessageSenderId: 1,

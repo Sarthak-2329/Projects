@@ -9,14 +9,14 @@ function ActiveTabSwitch() {
 
   return (
     <>
-      <div className="px-4 pt-2 pb-3 flex items-center justify-between gap-2">
-        <div className="inline-flex items-center rounded-full bg-oat border border-ink/15 p-1">
+      <div className="px-4 pt-1 pb-3 flex items-center justify-between gap-2">
+        <div className="inline-flex items-center rounded-full bg-oat border border-ink/15 p-1 shrink-0">
           <button
             type="button"
             onClick={() => setActiveTab("chats")}
-            className={`px-3.5 py-1.5 text-xs font-medium rounded-full transition-colors ${
+            className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
               activeTab === "chats"
-                ? "bg-forest/15 text-forest"
+                ? "bg-forest/15 text-forest font-semibold"
                 : "text-ink/50 hover:text-ink"
             }`}
           >
@@ -25,9 +25,9 @@ function ActiveTabSwitch() {
           <button
             type="button"
             onClick={() => setActiveTab("contacts")}
-            className={`px-3.5 py-1.5 text-xs font-medium rounded-full transition-colors ${
+            className={`px-3 py-1 text-xs font-medium rounded-full transition-colors ${
               activeTab === "contacts"
-                ? "bg-forest/15 text-forest"
+                ? "bg-forest/15 text-forest font-semibold"
                 : "text-ink/50 hover:text-ink"
             }`}
           >
@@ -39,9 +39,9 @@ function ActiveTabSwitch() {
           type="button"
           onClick={() => setIsGroupModalOpen(true)}
           title="Create New Group"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-oat border border-ink/15 text-ink/60 hover:text-forest hover:border-forest/50 hover:bg-forest/5 transition-all shadow-sm shrink-0"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full bg-oat border border-ink/15 text-ink/70 hover:text-forest hover:border-forest/50 hover:bg-forest/10 transition-all shadow-sm shrink-0 whitespace-nowrap"
         >
-          <Users className="w-3.5 h-3.5 text-forest" />
+          <Users className="w-3.5 h-3.5 text-forest shrink-0" />
           <span>New Group</span>
         </button>
       </div>

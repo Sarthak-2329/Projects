@@ -21,8 +21,16 @@ export const useChatStore = create((set, get) => ({
   selectedGroup: null,
   isUsersLoading: false,
   isMessagesLoading: false,
-  isGroupsLoading: false,
   isSoundEnabled: localStorage.getItem('isSoundEnabled') === 'true',
+
+  // --- Profile Picture Viewer Modal ---
+  avatarModal: { isOpen: false, imageUrl: '', title: '' },
+  openAvatarModal: (imageUrl, title = 'Profile Picture') => {
+    set({ avatarModal: { isOpen: true, imageUrl, title } });
+  },
+  closeAvatarModal: () => {
+    set({ avatarModal: { isOpen: false, imageUrl: '', title: '' } });
+  },
 
   // --- Typing indicators (1:1 DMs) ---
   typingUsers: new Set(), // Set of userIds currently typing

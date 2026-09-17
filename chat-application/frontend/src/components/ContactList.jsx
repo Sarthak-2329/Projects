@@ -5,7 +5,7 @@ import UsersLoadingSkeleton from "./UsersLoadingSkeleton";
 import { useAuthStore } from "../store/useAuthStore";
 
 function ContactList() {
-  const { getAllContacts, allContacts, setSelectedUser, isUsersLoading } = useChatStore();
+  const { getAllContacts, allContacts, setSelectedUser, isUsersLoading, openAvatarModal } = useChatStore();
   const { onlineUsers } = useAuthStore();
   const [query, setQuery] = useState("");
 
@@ -30,14 +30,13 @@ function ContactList() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search contacts…"
-          className="w-full pl-8 pr-8 py-2 text-xs rounded-lg bg-oat border border-ink/20 text-ink placeholder-ink/35 focus:outline-none focus:ring-1 focus:ring-forest focus:border-forest/40 transition"
+          className="w-full pl-8 pr-8 py-1.5 text-xs rounded-lg bg-cream/70 border border-ink/15 text-ink placeholder:text-ink/35 focus:outline-none focus:border-forest/50 focus:bg-cream"
         />
         {query && (
           <button
             type="button"
-            aria-label="Clear search"
             onClick={() => setQuery("")}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink/35 hover:text-ink transition"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink/35 hover:text-ink/60"
           >
             <X className="w-3 h-3" />
           </button>
@@ -61,9 +60,20 @@ function ContactList() {
               className="w-full text-left group bg-cream/60 hover:bg-cream border border-ink/8 hover:border-ink/20 rounded-xl px-3.5 py-3 transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className="relative">
-                  <div className="size-11 rounded-full ring-1 ring-ink/15 ring-offset-2 ring-offset-cream overflow-hidden">
-                    <img src={contact.profilePic || "/avatar.png"} alt={contact.fullName} />
+                <div className="relative shrink-0">
+                  <div
+                    className="size-11 rounded-full ring-1 ring-ink/15 ring-offset-2 ring-offset-cream overflow-hidden cursor-pointer hover:ring-forest/50 transition-all"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openAvatarModal(contact.profilePic || "/avatar.png", contact.fullName);
+                    }}
+                    title="View profile photo"
+                  >
+                    <img
+                      src={contact.profilePic || "/avatar.png"}
+                      alt={contact.fullName}
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                   {isOnline && (
                     <span className="absolute bottom-0 right-0 w-3 h-3 bg-sage border-2 border-cream rounded-full" />
