@@ -9,8 +9,19 @@ class VectorStore:
     def __init__(self, collection_name: str = "documents"):
         # Initialize the persistent client
         self.client = chromadb.PersistentClient(path=CHROMA_DATA_PATH)
-        # Get or create the collection
-        self.collection = self.client.get_or_create_collection(name=collection_name)
+        self.collection_name = collection_name
+        self._collection = None
+
+    @property
+    def collection(self):
+        # Return assigned collection if set, otherwise get or create dynamically
+        if self._collection is not None:
+            return self._collection
+        return self.client.get_or_create_collection(name=self.collection_name)
+
+    @collection.setter
+    def collection(self, value):
+        self._collection = value
 
     def add_chunks(self, ids: List[str], embeddings: List[List[float]], documents: List[str], metadatas: List[Dict[str, Any]]):
         """

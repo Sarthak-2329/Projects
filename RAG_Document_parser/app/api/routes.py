@@ -49,7 +49,7 @@ async def upload_document(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/documents")
-async def list_documents():
+def list_documents():
     """
     Endpoint to list all ingested documents and their corresponding chunk counts.
     """
@@ -60,7 +60,7 @@ async def list_documents():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/query", response_model=QueryResponse)
-async def query_document(request: QueryRequest):
+def query_document(request: QueryRequest):
     """
     Endpoint to ask a question against the ingested documents.
 

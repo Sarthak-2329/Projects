@@ -1,9 +1,10 @@
 # Full-Stack RAG Document Parser
 
-A portfolio project demonstrating a complete Retrieval-Augmented Generation (RAG) pipeline. **Week 1** handles document ingestion (PDF parsing, chunking, embedding, ChromaDB storage). **Week 2** adds the query pipeline (semantic retrieval, grounded LLM answer generation, and citation parsing).
+A portfolio project demonstrating a complete Retrieval-Augmented Generation (RAG) pipeline. **Week 1** handles document ingestion (PDF parsing, chunking, embedding, ChromaDB storage). **Week 2** adds the query pipeline (semantic retrieval, grounded LLM answer generation, and citation parsing). **Week 3** delivers a web frontend (Next.js) that ties everything together — upload PDFs, browse ingested documents, ask questions, and inspect grounded citations.
 
 ## Tech Stack
 - **Framework**: FastAPI (Python 3.11+)
+- **Frontend**: Next.js (App Router) with React
 - **Extraction**: `pdfplumber`
 - **Chunking**: Custom fixed-size overlapping window function
 - **Embeddings**: `sentence-transformers` (`all-MiniLM-L6-v2`)
@@ -41,6 +42,17 @@ The API will be available at `http://127.0.0.1:8000`. Visit `http://127.0.0.1:80
 pytest tests/ -v
 ```
 Tests use a deterministic LLM mock — no API key required to run them.
+
+### 5. Run the Web Frontend
+In a **second terminal** (keep the backend running):
+```bash
+cd frontend
+npm install    # first time only
+npm run dev
+```
+Open `http://localhost:3000` in your browser.
+
+> **Note:** The frontend calls the backend at the URL defined in `frontend/.env.local`. The default is `http://localhost:8000`. If your backend runs on a different port, update `NEXT_PUBLIC_API_URL` in that file.
 
 ---
 
@@ -137,3 +149,19 @@ After the LLM generates an answer, a post-processing step:
 4. Builds citation objects with `chunk_text`, `filename`, `page`, and `chunk_index`.
 
 This is the trickiest part of the pipeline — see the heavily commented `parse_citations()` function in `app/services/query.py` for the full walkthrough.
+
+### Week 3: Web Frontend
+
+The frontend is a Next.js (App Router) application in the `frontend/` directory. It communicates with the FastAPI backend entirely via `fetch` — no shared state, no server-side rendering of data.
+
+#### Three-Section Layout
+A single page with three logical sections stacked vertically:
+1. **Upload** — file input + `POST /upload` + loading/success/error feedback.
+2. **Documents** — `GET /documents` on load, clickable cards to scope queries to a specific document.
+3. **Chat** — text input + `POST /query`, scrollable Q&A history with inline citations.
+
+#### Citation Display
+Each answer shows expandable citation items: `[N] filename — Page P` as the header, and the raw chunk text as the expandable body. This is the visual proof that the system is grounded — the user can verify every claim against the actual source text. See `CitationList.js` for the heavily commented rendering logic.
+
+#### "I Don't Know" Handling
+When the LLM responds with a variant of "I don't know based on the provided context", the answer is rendered with a distinct muted style and info icon, clearly distinguishing it from normal answers. This prevents the user from mistaking an unanswerable question for a real finding.

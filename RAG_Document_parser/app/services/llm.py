@@ -8,7 +8,7 @@ touching any calling code.
 
 Configuration:
   Set ONE of these environment variables with a valid API key:
-    - GEMINI_API_KEY   → uses Google Gemini (gemini-2.0-flash)
+    - GEMINI_API_KEY   → uses Google Gemini (gemini-3.1-flash-lite)
     - OPENAI_API_KEY   → uses OpenAI (gpt-4o-mini)
     - ANTHROPIC_API_KEY → uses Anthropic Claude (claude-3-5-haiku-20241022)
 
@@ -17,6 +17,7 @@ Configuration:
 """
 
 import os
+import time
 import httpx
 from typing import Optional, Callable
 
@@ -44,17 +45,26 @@ def set_generate_override(fn: Optional[Callable[[str], str]]) -> None:
 # ---------------------------------------------------------------------------
 
 def _call_gemini(prompt: str, api_key: str) -> str:
-    """Call Google Gemini REST API."""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={api_key}"
+    """Call Google Gemini REST API with retry on rate limits or service spikes."""
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key={api_key}"
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {"temperature": 0.2, "maxOutputTokens": 1024}
     }
-    response = httpx.post(url, json=payload, timeout=60.0)
-    response.raise_for_status()
-    data = response.json()
-    # Navigate Gemini's nested response structure.
-    return data["candidates"][0]["content"]["parts"][0]["text"]
+    max_retries = 4
+    for attempt in range(max_retries):
+        try:
+            response = httpx.post(url, json=payload, timeout=60.0)
+            response.raise_for_status()
+            data = response.json()
+            # Navigate Gemini's nested response structure.
+            return data["candidates"][0]["content"]["parts"][0]["text"]
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code in (429, 503) and attempt < max_retries - 1:
+                # 429 quota resets after ~10-15s
+                time.sleep(8 * (attempt + 1))
+                continue
+            raise
 
 
 def _call_openai(prompt: str, api_key: str) -> str:
