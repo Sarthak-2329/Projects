@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# ChromaDB local data — not committed; re-seeded on startup in production
+data/chroma_db/
+
+# Environment variables — never commit real keys
+.env
+.env.local
+.env*.local
+# Exception: track the production env template (has placeholder URL, no secrets)
+!frontend/.env.production
+
+# Next.js
+frontend/.next/
+frontend/node_modules/
+frontend/out/
+
+# Test artifacts
+*.pdf
+.pytest_cache/
+htmlcov/
+.coverage
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

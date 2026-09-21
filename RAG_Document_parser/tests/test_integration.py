@@ -34,6 +34,7 @@ from reportlab.lib.pagesizes import letter
 from main import app
 import app.services.query as query_module
 import app.services.ingestion as ingestion_module
+import app.services.hybrid_search as hybrid_search_module
 from app.database.vector_store import VectorStore
 from app.services.embedding import generate_embeddings
 from app.services.llm import set_generate_override
@@ -102,11 +103,14 @@ def setup_integration_environment():
     int_store.collection = int_store.client.create_collection(INT_COLLECTION)
 
     # --- Step 2: Monkey-patch module-level singletons ---
-    # query.py and ingestion.py each hold a module-level VectorStore instance.
-    # We replace them with our isolated one for the duration of these tests.
+    # query.py, hybrid_search.py, and ingestion.py each hold a module-level
+    # VectorStore instance. We replace them with our isolated one for the
+    # duration of these tests.
     original_query_store = query_module._vector_store
+    original_hybrid_store = hybrid_search_module._vector_store
     original_ingestion_store = ingestion_module.vector_store
     query_module._vector_store = int_store
+    hybrid_search_module._vector_store = int_store
     ingestion_module.vector_store = int_store
 
     # --- Step 3: Build and ingest the test PDF ---
@@ -174,6 +178,7 @@ def setup_integration_environment():
     # --- Teardown ---
     set_generate_override(None)
     query_module._vector_store = original_query_store
+    hybrid_search_module._vector_store = original_hybrid_store
     ingestion_module.vector_store = original_ingestion_store
     if os.path.exists(INT_PDF_NAME):
         os.remove(INT_PDF_NAME)

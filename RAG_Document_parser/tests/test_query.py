@@ -24,6 +24,8 @@ from app.services.embedding import generate_embeddings
 from app.services.query import construct_prompt, parse_citations, run_query, _vector_store
 from app.services.llm import set_generate_override
 from app.services.ingestion import ingest_pdf, vector_store
+import app.services.ingestion as ingestion_module
+import app.services.hybrid_search as hybrid_search_module
 
 
 # ---------------------------------------------------------------------------
@@ -54,14 +56,23 @@ def setup_query_test_environment():
     Create a test PDF with known content, ingest it, and set up
     a deterministic LLM override for all query tests.
     """
-    # Reset the collection to isolate these tests.
+    QUERY_COLLECTION = "query_test_collection"
+
+    # Use a dedicated collection name so subprocess tests (which only touch
+    # the "documents" collection) can never invalidate our UUID.
+    # This is the same isolation strategy used by test_integration.py.
     try:
-        _vector_store.client.delete_collection("documents")
+        _vector_store.client.delete_collection(QUERY_COLLECTION)
     except Exception:
         pass
-    _vector_store.collection = _vector_store.client.create_collection("documents")
-    # Also reset the ingestion module's store reference so it uses the same collection.
-    vector_store.collection = _vector_store.collection
+    fresh_collection = _vector_store.client.create_collection(QUERY_COLLECTION)
+
+    # Point all module-level singletons at our isolated collection.
+    _vector_store.collection = fresh_collection
+    ingestion_module.vector_store._collection = None
+    ingestion_module.vector_store.collection = fresh_collection
+    hybrid_search_module._vector_store._collection = None
+    hybrid_search_module._vector_store.collection = fresh_collection
 
     # Build a test PDF with two pages of distinct content.
     c = canvas.Canvas(QUERY_TEST_PDF, pagesize=letter)
@@ -124,9 +135,13 @@ def setup_query_test_environment():
     if os.path.exists(QUERY_TEST_PDF):
         os.remove(QUERY_TEST_PDF)
     try:
-        _vector_store.client.delete_collection("documents")
+        _vector_store.client.delete_collection("query_test_collection")
     except Exception:
         pass
+    # Reset all collection references.
+    _vector_store._collection = None
+    ingestion_module.vector_store._collection = None
+    hybrid_search_module._vector_store._collection = None
 
 
 # ---------------------------------------------------------------------------

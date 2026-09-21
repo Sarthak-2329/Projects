@@ -1,27 +1,119 @@
 # Full-Stack RAG Document Parser
 
-A portfolio project demonstrating a complete Retrieval-Augmented Generation (RAG) pipeline. **Week 1** handles document ingestion (PDF parsing, chunking, embedding, ChromaDB storage). **Week 2** adds the query pipeline (semantic retrieval, grounded LLM answer generation, and citation parsing). **Week 3** delivers a web frontend (Next.js) that ties everything together — upload PDFs, browse ingested documents, ask questions, and inspect grounded citations.
+A portfolio project demonstrating a production-grade Retrieval-Augmented Generation (RAG) pipeline, built end-to-end over four weeks. Upload PDFs, ask natural-language questions, and get grounded answers with exact citations — powered by **hybrid keyword + semantic search**, a fully evaluated pipeline, and a live deployed demo.
+
+**[🚀 Live Demo](https://your-app.vercel.app)** · **[📖 API Docs](https://your-service.onrender.com/docs)**
+
+> **Note:** The live demo is seeded with a sample document (world geography, space exploration, history, climate, biology) since the free hosting tier doesn't persist uploads across restarts. Upload your own PDFs and they'll be queryable immediately — until the next cold start.
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Next.js Frontend (Vercel)               │
+│   Upload PDF → Browse Docs → Ask Questions → Cite Sources   │
+└───────────────────────────┬─────────────────────────────────┘
+                            │  HTTP (CORS-enabled)
+┌───────────────────────────▼─────────────────────────────────┐
+│                   FastAPI Backend (Render)                   │
+│                                                             │
+│  POST /upload          POST /query         GET /documents   │
+│       │                     │                               │
+│  ┌────▼────────────┐  ┌─────▼──────────────────────────┐   │
+│  │ Ingestion        │  │ Hybrid Query Pipeline           │   │
+│  │ Pipeline         │  │                                 │   │
+│  │ PDF → Extract   │  │  Embed question                 │   │
+│  │     → Chunk     │  │  ├─ Vector search (ChromaDB)    │   │
+│  │     → Embed     │  │  └─ BM25 keyword search         │   │
+│  │     → Store     │  │       ↓                         │   │
+│  └────────┬────────┘  │  Reciprocal Rank Fusion (k=60)  │   │
+│           │           │       ↓                         │   │
+│  ┌────────▼────────────────── Top-K chunks              │   │
+│  │       ChromaDB (local persistent store)              │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                            │                                 │
+│                    ┌───────▼────────┐                        │
+│                    │  LLM Answer    │                        │
+│                    │  Generation    │                        │
+│                    │  (Gemini /     │                        │
+│                    │   OpenAI /     │                        │
+│                    │   Anthropic)   │                        │
+│                    └───────┬────────┘                        │
+│                            │ Answer + Citations              │
+└────────────────────────────┼────────────────────────────────┘
+                             │
+                    JSON response with answer text
+                    + list of {filename, page, chunk_text}
+```
+
+**Hybrid Search Detail:**
+Every query runs through two retrievers in parallel:
+1. **Vector search** — `all-MiniLM-L6-v2` embeddings → ChromaDB cosine similarity. Great for semantic paraphrases.
+2. **BM25 keyword search** — built on-the-fly from all stored chunks. Great for exact matches: proper nouns, version numbers, rare terms.
+
+Both ranked lists are merged with **Reciprocal Rank Fusion** (`score = Σ 1/(k + rank)`, k = 60). No manual score scaling needed — RRF is naturally scale-invariant.
+
+---
 
 ## Tech Stack
-- **Framework**: FastAPI (Python 3.11+)
-- **Frontend**: Next.js (App Router) with React
-- **Extraction**: `pdfplumber`
-- **Chunking**: Custom fixed-size overlapping window function
-- **Embeddings**: `sentence-transformers` (`all-MiniLM-L6-v2`)
-- **Vector DB**: ChromaDB (Local Persistent Client)
-- **LLM**: Provider-agnostic wrapper supporting Gemini, OpenAI, and Anthropic
 
-## Setup and Running Locally
+| Layer | Technology |
+|-------|-----------|
+| **Frontend** | Next.js 15 (App Router), React 19 |
+| **Backend** | FastAPI, Python 3.14 |
+| **PDF parsing** | `pdfplumber` |
+| **Chunking** | Custom overlapping-window (500 chars, 50 overlap) |
+| **Embeddings** | `sentence-transformers` (`all-MiniLM-L6-v2`, 384-dim) |
+| **Vector DB** | ChromaDB (local persistent client) |
+| **Keyword search** | `rank-bm25` (BM25Okapi) |
+| **Retrieval** | Hybrid: BM25 + Vector via Reciprocal Rank Fusion |
+| **LLM** | Provider-agnostic: Gemini, OpenAI, or Anthropic |
+| **Backend hosting** | Render (free tier, auto-seeded on cold start) |
+| **Frontend hosting** | Vercel |
 
-### 1. Create a Virtual Environment and Install Dependencies
+---
+
+## Evaluation Results
+
+Results from running the [20-question eval harness](eval/eval_dataset.json) against the deployed backend with `rag_sample.pdf` ingested.
+
+<!-- EVAL_RESULTS_TABLE_START -->
+
+| Metric | Score |
+|--------|-------|
+| **Overall pass rate** | **20/20 (100%)** |
+| Retrieval accuracy | 20/20 |
+| Answer quality | 20/20 |
+
+| Type | Questions | Pass | Retrieval ✓ | Answer ✓ |
+|------|-----------|------|-------------|----------|
+| factual | 12 | 12 | 12 | 12 |
+| keyword | 5 | 5 | 5 | 5 |
+| no_answer | 3 | 3 | 3 | 3 |
+
+See [`eval/eval_results.md`](eval/eval_results.md) for the full per-question breakdown.
+<!-- EVAL_RESULTS_TABLE_END -->
+
+---
+
+## Local Setup
+
+### 1. Clone and create virtual environment
+
 ```bash
+git clone https://github.com/your-username/RAG_Document_parser.git
+cd RAG_Document_parser
 python3 -m venv venv
-source venv/bin/activate
+source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Configure an LLM Provider
-Set one of the following environment variables with a valid API key:
+### 2. Configure an LLM provider
+
+Set **one** of these environment variables:
+
 ```bash
 export GEMINI_API_KEY="your-key-here"
 # OR
@@ -29,139 +121,195 @@ export OPENAI_API_KEY="your-key-here"
 # OR
 export ANTHROPIC_API_KEY="your-key-here"
 ```
-The system auto-detects the first available key (priority: Gemini → OpenAI → Anthropic). To force a specific provider, also set `LLM_PROVIDER=gemini|openai|anthropic`.
 
-### 3. Run the FastAPI Server
+The system auto-detects the first available key (Gemini → OpenAI → Anthropic).
+Override with `LLM_PROVIDER=gemini|openai|anthropic` to force a specific provider.
+
+### 3. (Optional) Seed with the sample document
+
+```bash
+python scripts/seed_on_startup.py
+```
+
+This ingests `data/sample_documents/rag_sample.pdf` so you can query immediately without uploading anything.
+
+### 4. Start the backend
+
 ```bash
 uvicorn main:app --reload
 ```
-The API will be available at `http://127.0.0.1:8000`. Visit `http://127.0.0.1:8000/docs` for interactive Swagger UI.
 
-### 4. Run the Tests
-```bash
-pytest tests/ -v
-```
-Tests use a deterministic LLM mock — no API key required to run them.
+API at `http://127.0.0.1:8000` · Swagger UI at `http://127.0.0.1:8000/docs`
 
-### 5. Run the Web Frontend
-In a **second terminal** (keep the backend running):
+### 5. Start the frontend
+
+In a second terminal:
+
 ```bash
 cd frontend
-npm install    # first time only
+npm install   # first time only
 npm run dev
 ```
-Open `http://localhost:3000` in your browser.
 
-> **Note:** The frontend calls the backend at the URL defined in `frontend/.env.local`. The default is `http://localhost:8000`. If your backend runs on a different port, update `NEXT_PUBLIC_API_URL` in that file.
+Open `http://localhost:3000`.
+
+> The frontend reads `frontend/.env.local`. Default is `http://localhost:8000`. Change `NEXT_PUBLIC_API_URL` to point at a different backend.
+
+### 6. Run tests
+
+```bash
+pytest tests/ -v                        # all tests (no API key required)
+pytest tests/test_hybrid_search.py -v -s  # hybrid search tests with verbose output
+```
+
+### 7. Run the evaluation harness
+
+With the backend running:
+
+```bash
+python eval/run_eval.py
+```
+
+Produces `eval/eval_results.json` and `eval/eval_results.md`.
 
 ---
 
-## API Endpoints
+## Deployment
+
+### Backend → Render
+
+1. Push this repo to GitHub.
+2. Go to [render.com](https://render.com) → **New → Blueprint** → connect your repo.
+3. Render detects `render.yaml` and sets up the web service automatically.
+4. In the Render dashboard → **Environment** tab, add your `GEMINI_API_KEY` (or `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`).
+5. Once deployed, copy your service URL (e.g. `https://rag-document-parser.onrender.com`).
+
+**Cold-start seeding:** The `startCommand` in `render.yaml` runs `seed_on_startup.py` before uvicorn. On every cold start (Render's free tier spins down after 15 min of inactivity), ChromaDB is empty — the seed script re-ingests `rag_sample.pdf` automatically (~10–15s). The demo is always populated.
+
+### Frontend → Vercel
+
+1. Go to [vercel.com](https://vercel.com) → **New Project** → import your repo → set **Root Directory** to `frontend`.
+2. In Vercel's **Environment Variables**, add:
+   ```
+   NEXT_PUBLIC_API_URL = https://your-service.onrender.com
+   ```
+3. Deploy. Your frontend URL will be `https://your-app.vercel.app`.
+4. Update `CORS_ORIGINS` in Render's Environment tab to your Vercel URL to lock down CORS:
+   ```
+   CORS_ORIGINS = https://your-app.vercel.app
+   ```
+5. Redeploy the Render service (or it will pick up on next restart).
+
+---
+
+## API Reference
 
 ### `POST /upload` — Ingest a PDF
+
 ```bash
 curl -X POST http://127.0.0.1:8000/upload \
   -F "file=@document.pdf"
 ```
-**Response:**
+
 ```json
 { "document_id": "document.pdf", "chunks_created": 42 }
 ```
 
 ### `GET /documents` — List Ingested Documents
+
 ```bash
 curl http://127.0.0.1:8000/documents
 ```
-**Response:**
+
 ```json
 { "documents": [{ "document_id": "document.pdf", "chunk_count": 42 }] }
 ```
 
-### `POST /query` — Ask a Question (Week 2)
+### `POST /query` — Ask a Question
+
 ```bash
 curl -X POST http://127.0.0.1:8000/query \
   -H "Content-Type: application/json" \
-  -d '{"question": "What is the main topic of the document?", "document_id": "document.pdf"}'
+  -d '{"question": "Who first summited Mount Everest?", "document_id": "rag_sample.pdf"}'
 ```
-**Response:**
+
 ```json
 {
-  "answer": "The document discusses renewable energy sources [1], focusing on solar and wind power [2].",
+  "answer": "Mount Everest was first summited by Edmund Hillary and Tenzing Norgay on May 29, 1953 [1].",
   "citations": [
     {
-      "chunk_text": "Renewable energy sources are becoming increasingly...",
-      "filename": "document.pdf",
-      "page": 1,
-      "chunk_index": 0
-    },
-    {
-      "chunk_text": "Solar and wind power have seen significant growth...",
-      "filename": "document.pdf",
+      "chunk_text": "Its peak stands at 8,848 metres... first summited by Edmund Hillary and Tenzing Norgay...",
+      "filename": "rag_sample.pdf",
       "page": 2,
-      "chunk_index": 3
+      "chunk_index": 5
     }
   ]
 }
 ```
-The `document_id` field is optional — omit it to search across all ingested documents.
+
+`document_id` is optional — omit it to search across all ingested documents.
 
 ---
 
 ## Architectural Decisions
 
-### Week 1: Ingestion Pipeline
+### Hybrid Search (Week 4)
 
-#### Custom Chunking Logic & Overlap
-We chose to implement a hand-rolled chunking function (approx 500 characters) instead of using LangChain's pre-built splitters to demonstrate a deeper understanding of the mechanics.
+#### Why hybrid search?
+Pure semantic (vector) search uses embedding similarity. The embedding model (`all-MiniLM-L6-v2`) has no semantic representation for rare proper nouns, version numbers, or invented terms — all unknown words look the same in embedding space. A query like "What is the Zylophantium Protocol?" may retrieve chunks about "procedures" (semantically adjacent) rather than the one chunk that literally contains the term.
 
-**Why use an overlap? (50 characters)**
-When a document is split arbitrarily by size, a boundary might cut right through the middle of a sentence, paragraph, or key idea. If the LLM only retrieves the second half of the idea, it lacks the context from the first half. By using a 50-character overlap, the end of `Chunk A` is repeated at the beginning of `Chunk B`. This ensures that context isn't lost across artificial chunk boundaries, improving the quality of the retrieval phase.
+BM25 is the complementary tool: it scores documents by exact token matches using TF-IDF-like statistics. It reliably surfaces the chunk that contains every query token, even if the model can't understand what those tokens mean.
+
+#### Why Reciprocal Rank Fusion?
+The challenge with combining BM25 and vector search is that their scores live in entirely different numeric spaces (BM25 is unbounded; cosine distance is 0–2). Normalising and blending raw scores requires tuning. RRF sidesteps this entirely: it only uses *rank position*, not raw score. The formula `1/(k + rank)` gives each document a contribution based solely on where it appeared in each list. Documents that rank well in **both** lists accumulate the highest combined score.
+
+The standard `k = 60` is used (from Cormack, Clarke & Buettcher, SIGIR 2009). It means rank 1 contributes ~0.0164 and rank 20 contributes ~0.0125 — a gentle slope that rewards consistency across retrievers over excellence in one.
+
+See [`tests/test_hybrid_search.py::test_hybrid_favors_exact_keyword_over_pure_vector`](tests/test_hybrid_search.py) for a concrete demonstration: the test shows the exact failure mode (vector alone misranks a rare-keyword chunk) and verifies that hybrid fixes it.
+
+### Evaluation Harness (Week 4)
+
+The eval harness in [`eval/run_eval.py`](eval/run_eval.py) tests two things independently:
+- **Retrieval accuracy**: did the correct page appear in the citations?
+- **Answer quality**: did the expected keywords appear in the answer?
+
+This separation matters: the retriever and LLM can fail independently. A good retriever + bad prompt construction would show high retrieval accuracy and low answer quality. The split diagnosis is actionable.
+
+The 20 questions span three types: easy factual (12), keyword-critical (4, where the exact term is the answer), and no-answer (4, where the context doesn't contain the answer and the system must refuse to fabricate). No-answer accuracy is the most important quality metric — it proves the system is grounded.
+
+### Ingestion Pipeline (Week 1)
+
+#### Custom Chunking & Overlap
+Hand-rolled chunking (500 characters, 50-character overlap) instead of a framework splitter. The overlap ensures context at a chunk boundary appears in both adjacent chunks — important because a chunk boundary might cut through a sentence mid-idea.
 
 #### Metadata Storage Strategy
-For every chunk stored in ChromaDB, we store a metadata payload containing:
-- `source`: The filename of the PDF.
-- `page`: The specific page the chunk originated from.
-- `chunk_index`: The sequential index of the chunk within the document.
+Every chunk stores `{source, page, chunk_index}` in ChromaDB. This enables:
+- Exact page citations in answers (verifiable by the user).
+- Scoped search: `document_id` parameter limits retrieval to a single file.
+- Future contextual retrieval: neighbours of a relevant chunk can be fetched by `chunk_index ± 1`.
 
-**Why store this metadata?**
-In a production RAG system, generating an answer is only half the battle; proving *where* the answer came from is just as important.
-1. The `page` and `source` metadata are used in Week 2 to generate exact **citations** for the user (e.g., "According to document.pdf, Page 4...").
-2. The `chunk_index` is useful for **contextual retrieval**. If a retrieved chunk is highly relevant, we can use the `chunk_index` to fetch the chunks immediately before and after it to provide the LLM with a wider context window.
-
-### Week 2: Query Pipeline
+### Query Pipeline (Week 2)
 
 #### Provider-Agnostic LLM Wrapper
-The `generate_answer(prompt) -> str` function is the only place in the codebase that talks to an LLM API. It supports Gemini, OpenAI, and Anthropic behind a single interface, so swapping providers means changing one environment variable — not refactoring calling code. For tests, a `set_generate_override()` hook injects deterministic behavior without any API calls.
+`generate_answer(prompt) → str` is the only place that touches an LLM API. One env var change swaps the provider. Tests inject a deterministic callable via `set_generate_override()` — no API key needed to run the test suite.
 
 #### Grounded Prompt Construction
-The system prompt explicitly instructs the LLM to:
-1. Answer ONLY from the numbered context chunks provided.
-2. Cite every claim with a bracketed reference number `[1]`, `[2]`, etc.
-3. Say "I don't know based on the provided context." if the context is insufficient.
+The system prompt instructs the LLM to: cite every claim with `[N]` references, answer only from the numbered context blocks, and say *"I don't know based on the provided context."* if the context is insufficient. This is verifiable — `parse_citations()` extracts `[N]` references and maps them back to exact chunk metadata, which is shown to the user.
 
-This design ensures the system is **provably grounded** — the most important test in the suite verifies that unanswerable questions produce an "I don't know" response rather than a fabricated answer.
+### Deployment (Week 4)
 
-#### Citation Parsing
-After the LLM generates an answer, a post-processing step:
-1. Extracts all bracketed reference numbers (`[1]`, `[2]`, `[1, 2]`, etc.) using regex.
-2. Maps 1-based references back to 0-based chunk indices.
-3. Filters out-of-bounds references and deduplicates.
-4. Builds citation objects with `chunk_text`, `filename`, `page`, and `chunk_index`.
+#### Render Free Tier: Self-Healing Cold Starts
+Render's free web service has no persistent disk — the filesystem is reset on restart. ChromaDB's `PersistentClient` writes to disk, so it would be empty on every cold start. `scripts/seed_on_startup.py` solves this: it checks `collection.count()` and re-ingests `rag_sample.pdf` if empty. The seeding step runs in the `startCommand` before uvicorn, so the API is never alive with an empty DB.
 
-This is the trickiest part of the pipeline — see the heavily commented `parse_citations()` function in `app/services/query.py` for the full walkthrough.
+---
 
-### Week 3: Web Frontend
+## Known Limitations
 
-The frontend is a Next.js (App Router) application in the `frontend/` directory. It communicates with the FastAPI backend entirely via `fetch` — no shared state, no server-side rendering of data.
-
-#### Three-Section Layout
-A single page with three logical sections stacked vertically:
-1. **Upload** — file input + `POST /upload` + loading/success/error feedback.
-2. **Documents** — `GET /documents` on load, clickable cards to scope queries to a specific document.
-3. **Chat** — text input + `POST /query`, scrollable Q&A history with inline citations.
-
-#### Citation Display
-Each answer shows expandable citation items: `[N] filename — Page P` as the header, and the raw chunk text as the expandable body. This is the visual proof that the system is grounded — the user can verify every claim against the actual source text. See `CitationList.js` for the heavily commented rendering logic.
-
-#### "I Don't Know" Handling
-When the LLM responds with a variant of "I don't know based on the provided context", the answer is rendered with a distinct muted style and info icon, clearly distinguishing it from normal answers. This prevents the user from mistaking an unanswerable question for a real finding.
+| Limitation | Impact | Why it's acceptable here |
+|------------|--------|--------------------------|
+| **No persistent disk on Render free tier** | Uploaded PDFs are lost on restart; only the seed document survives. | Solved by auto-seeding. Users can re-upload; noted prominently in the UI. |
+| **BM25 corpus built on every query** | O(N) memory + time at query time. Fine for hundreds of chunks; would need a persistent index for 10k+ chunks. | Demo scale only. A production system would cache the corpus or use Elasticsearch. |
+| **Keyword-only answer checking in eval** | Doesn't catch fluent paraphrases; may under-count correct answers. | A threshold-based keyword check is deterministic and repeatable without an LLM-as-judge dependency. |
+| **Single-node, no queue** | FastAPI runs on one worker; concurrent requests are serialized. | Fine for a demo. Production would add workers or move LLM calls to a task queue. |
+| **Render free tier sleeps after 15 min** | First request after sleep takes ~30s (spin-up + re-seeding). | Normal for free tier; noted in the demo page. |
+| **LLM API key in env var only** | Key must be manually set in Render dashboard; not checked into source. | Correct security practice for a demo. Production would use a secrets manager. |

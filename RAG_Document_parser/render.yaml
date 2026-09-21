@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: rag-document-parser
+    env: python
+    plan: free
+    # Render runs from the repo root.
+    buildCommand: pip install -r requirements.txt
+    # 1. Seed ChromaDB with sample PDF if empty (handles cold-start data loss).
+    # 2. Start uvicorn on the port Render assigns via $PORT.
+    startCommand: python scripts/seed_on_startup.py && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # Allow all origins during initial deploy.
+      # After the Vercel frontend URL is known, tighten this to:
+      #   CORS_ORIGINS=https://your-app.vercel.app
+      - key: CORS_ORIGINS
+        value: "*"
+      # Set your LLM API key in the Render dashboard (Environment tab).
+      # Do NOT commit a real key here.
+      - key: GEMINI_API_KEY
+        sync: false
+      # Alternatively, set one of these instead of GEMINI_API_KEY:
+      # - key: OPENAI_API_KEY
+      #   sync: false
+      # - key: ANTHROPIC_API_KEY
+      #   sync: false

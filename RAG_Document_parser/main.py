@@ -5,8 +5,8 @@ from app.api.routes import router
 
 app = FastAPI(
     title="RAG Document Parser",
-    description="Week 3 Portfolio Project: Full-Stack RAG with Web Frontend",
-    version="3.0.0"
+    description="Week 4 Portfolio Project: Hybrid Search, Evaluation, and Deployed Full-Stack RAG",
+    version="4.0.0"
 )
 
 # ---------------------------------------------------------------------------

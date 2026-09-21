@@ -3,21 +3,24 @@ Query pipeline: retrieval, prompt construction, answer generation, and citation 
 
 This is the heart of the RAG system.  It ties together:
   1. The same embedding model used at ingestion time (all-MiniLM-L6-v2)
-  2. ChromaDB vector similarity search
+  2. Hybrid retrieval (BM25 keyword + ChromaDB vector search, fused via RRF)
   3. A carefully constructed grounding prompt
   4. The provider-agnostic LLM call
   5. Post-processing that maps bracketed reference numbers back to real chunk metadata
+
+Week 4 change: pure vector search replaced with hybrid_query() from
+app.services.hybrid_search.  The public run_query() interface is unchanged.
 """
 
 import re
 from typing import List, Dict, Any, Optional
 
-from app.services.embedding import generate_embeddings
+from app.services.hybrid_search import hybrid_query
 from app.services.llm import generate_answer
 from app.database.vector_store import VectorStore
 
 
-# Module-level store instance — reuses the same ChromaDB collection as ingestion.
+# Module-level store instance — used by tests that need to reset the collection.
 _vector_store = VectorStore()
 
 
@@ -182,20 +185,24 @@ def parse_citations(
 def run_query(
     question: str,
     document_id: Optional[str] = None,
-    top_k: int = 5
+    top_k: int = 5,
+    use_hybrid: bool = True
 ) -> Dict[str, Any]:
     """
     End-to-end query pipeline:
-      1. Embed the question using the SAME model as ingestion (all-MiniLM-L6-v2).
-      2. Retrieve the top-k most similar chunks from ChromaDB.
-      3. Construct a grounded prompt with numbered context.
-      4. Call the LLM via the provider-agnostic generate_answer().
-      5. Parse citations from the answer and map them to chunk metadata.
+      1. Retrieve the top-k most relevant chunks using hybrid search
+         (BM25 + vector via RRF) or pure vector search if use_hybrid=False.
+      2. Construct a grounded prompt with numbered context.
+      3. Call the LLM via the provider-agnostic generate_answer().
+      4. Parse citations from the answer and map them to chunk metadata.
 
     Args:
         question:    The user's natural-language question.
         document_id: Optional filename to scope retrieval to one document.
         top_k:       How many chunks to retrieve (default 5).
+        use_hybrid:  If True (default), use hybrid BM25+vector search.
+                     Set to False to fall back to pure vector search
+                     (useful for ablation tests and benchmarking).
 
     Returns:
         A dict with:
@@ -204,18 +211,22 @@ def run_query(
                        page, and chunk_index.
     """
 
-    # Step 1: Embed the question.
-    # CRITICAL: We reuse the exact same model (all-MiniLM-L6-v2) that was used
-    # during ingestion.  Using a different model would produce embeddings in a
-    # different vector space, making similarity search meaningless.
-    question_embedding = generate_embeddings([question])[0]
-
-    # Step 2: Retrieve top-k chunks.
-    chunks = _vector_store.query_chunks(
-        query_embedding=question_embedding,
-        top_k=top_k,
-        document_id=document_id
-    )
+    if use_hybrid:
+        # Hybrid path: BM25 + vector search, fused via Reciprocal Rank Fusion.
+        chunks = hybrid_query(
+            question=question,
+            top_k=top_k,
+            document_id=document_id,
+        )
+    else:
+        # Fallback pure-vector path (kept for ablation / testing).
+        from app.services.embedding import generate_embeddings
+        question_embedding = generate_embeddings([question])[0]
+        chunks = _vector_store.query_chunks(
+            query_embedding=question_embedding,
+            top_k=top_k,
+            document_id=document_id,
+        )
 
     # If no chunks were found, we can short-circuit — there's nothing
     # for the LLM to ground its answer on.
@@ -225,13 +236,13 @@ def run_query(
             "citations": []
         }
 
-    # Step 3: Construct the grounded prompt.
+    # Step 2: Construct the grounded prompt.
     prompt = construct_prompt(question, chunks)
 
-    # Step 4: Generate the answer.
+    # Step 3: Generate the answer.
     answer = generate_answer(prompt)
 
-    # Step 5: Parse citations from the answer text.
+    # Step 4: Parse citations from the answer text.
     citations = parse_citations(answer, chunks)
 
     return {

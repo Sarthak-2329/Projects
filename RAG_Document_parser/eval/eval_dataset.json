@@ -1,0 +1,142 @@
+[
+  {
+    "id": "q01",
+    "type": "factual",
+    "question": "When did Apollo 11 land on the Moon?",
+    "expected_keywords": ["1969", "july", "20"],
+    "expected_source_page": 1
+  },
+  {
+    "id": "q02",
+    "type": "factual",
+    "question": "Who were the astronauts on Apollo 11?",
+    "expected_keywords": ["armstrong", "aldrin", "collins"],
+    "expected_source_page": 1
+  },
+  {
+    "id": "q03",
+    "type": "factual",
+    "question": "At what altitude does the International Space Station orbit?",
+    "expected_keywords": ["408"],
+    "expected_source_page": 1
+  },
+  {
+    "id": "q04",
+    "type": "factual",
+    "question": "What power source does the Curiosity rover use?",
+    "expected_keywords": ["radioisotope", "thermoelectric"],
+    "expected_source_page": 1
+  },
+  {
+    "id": "q05",
+    "type": "keyword",
+    "question": "How far is Voyager 1 from the Sun?",
+    "expected_keywords": ["23 billion", "kilometres"],
+    "expected_source_page": 1
+  },
+  {
+    "id": "q06",
+    "type": "factual",
+    "question": "How much water does the Amazon River discharge per second?",
+    "expected_keywords": ["209"],
+    "expected_source_page": 2
+  },
+  {
+    "id": "q07",
+    "type": "factual",
+    "question": "What is the height of Mount Everest?",
+    "expected_keywords": ["8,848", "metres"],
+    "expected_source_page": 2
+  },
+  {
+    "id": "q08",
+    "type": "factual",
+    "question": "Who first summited Mount Everest and when?",
+    "expected_keywords": ["hillary", "norgay", "1953"],
+    "expected_source_page": 2
+  },
+  {
+    "id": "q09",
+    "type": "factual",
+    "question": "What percentage of the world's fresh water does Lake Baikal hold?",
+    "expected_keywords": ["20 percent"],
+    "expected_source_page": 2
+  },
+  {
+    "id": "q10",
+    "type": "keyword",
+    "question": "Who invented the World Wide Web and where?",
+    "expected_keywords": ["berners-lee", "cern"],
+    "expected_source_page": 3
+  },
+  {
+    "id": "q11",
+    "type": "factual",
+    "question": "What US patent number did Alexander Graham Bell receive for the telephone?",
+    "expected_keywords": ["174,465"],
+    "expected_source_page": 3
+  },
+  {
+    "id": "q12",
+    "type": "keyword",
+    "question": "What mold did Alexander Fleming observe in 1928?",
+    "expected_keywords": ["penicillium notatum"],
+    "expected_source_page": 3
+  },
+  {
+    "id": "q13",
+    "type": "factual",
+    "question": "What temperature limit did the Paris Agreement set for global warming?",
+    "expected_keywords": ["2 degrees", "1.5"],
+    "expected_source_page": 4
+  },
+  {
+    "id": "q14",
+    "type": "factual",
+    "question": "How long is the Great Barrier Reef?",
+    "expected_keywords": ["2,300 kilometres"],
+    "expected_source_page": 4
+  },
+  {
+    "id": "q15",
+    "type": "keyword",
+    "question": "What international treaty was signed in 1987 to protect the ozone layer?",
+    "expected_keywords": ["montreal protocol"],
+    "expected_source_page": 4
+  },
+  {
+    "id": "q16",
+    "type": "factual",
+    "question": "Who described the double-helix structure of DNA and in what year?",
+    "expected_keywords": ["watson", "crick", "1953"],
+    "expected_source_page": 5
+  },
+  {
+    "id": "q17",
+    "type": "keyword",
+    "question": "Who won the Nobel Prize in Chemistry in 2020 for CRISPR-Cas9?",
+    "expected_keywords": ["doudna", "charpentier"],
+    "expected_source_page": 5
+  },
+  {
+    "id": "q18",
+    "type": "no_answer",
+    "question": "What is the GDP of Japan in 2024?",
+    "expected_keywords": ["don't know", "not", "provided context"],
+    "expected_source_page": null
+  },
+  {
+    "id": "q19",
+    "type": "no_answer",
+    "question": "What are the ingredients in a traditional Italian carbonara?",
+    "expected_keywords": ["don't know", "not", "provided context"],
+    "expected_source_page": null
+  },
+  {
+    "id": "q20",
+    "type": "no_answer",
+    "question": "Who won the FIFA World Cup in 2022?",
+    "expected_keywords": ["don't know", "not", "provided context"],
+    "expected_source_page": null
+  }
+]

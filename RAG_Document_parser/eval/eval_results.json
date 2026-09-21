@@ -1,0 +1,288 @@
+{
+  "run_timestamp": "2026-09-21 05:45 UTC",
+  "api_url": "http://localhost:8000",
+  "total_questions": 20,
+  "overall_pass_rate": "20/20 (100%)",
+  "retrieval_accuracy": "20/20",
+  "answer_accuracy": "20/20",
+  "by_type": {
+    "factual": {
+      "total": 12,
+      "pass": 12,
+      "retrieval": 12,
+      "answer": 12
+    },
+    "keyword": {
+      "total": 5,
+      "pass": 5,
+      "retrieval": 5,
+      "answer": 5
+    },
+    "no_answer": {
+      "total": 3,
+      "pass": 3,
+      "retrieval": 3,
+      "answer": 3
+    }
+  },
+  "results": [
+    {
+      "id": "q01",
+      "type": "factual",
+      "question": "When did Apollo 11 land on the Moon?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "Apollo 11 landed on the Moon on July 20, 1969 [1].",
+      "citation_pages": [
+        1
+      ],
+      "expected_page": 1
+    },
+    {
+      "id": "q02",
+      "type": "factual",
+      "question": "Who were the astronauts on Apollo 11?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "The astronauts on the Apollo 11 mission were Neil Armstrong, Buzz Aldrin, and Michael Collins [1].",
+      "citation_pages": [
+        1
+      ],
+      "expected_page": 1
+    },
+    {
+      "id": "q03",
+      "type": "factual",
+      "question": "At what altitude does the International Space Station orbit?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "The International Space Station orbits Earth at an average altitude of approximately 408 kilometres [2].",
+      "citation_pages": [
+        1
+      ],
+      "expected_page": 1
+    },
+    {
+      "id": "q04",
+      "type": "factual",
+      "question": "What power source does the Curiosity rover use?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "The Curiosity rover is powered by a radioisotope thermoelectric generator [1].",
+      "citation_pages": [
+        1
+      ],
+      "expected_page": 1
+    },
+    {
+      "id": "q05",
+      "type": "keyword",
+      "question": "How far is Voyager 1 from the Sun?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "As of 2024, Voyager 1 is approximately 23 billion kilometres from the Sun [1], [2].",
+      "citation_pages": [
+        1,
+        1
+      ],
+      "expected_page": 1
+    },
+    {
+      "id": "q06",
+      "type": "factual",
+      "question": "How much water does the Amazon River discharge per second?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "The Amazon River discharges approximately 209,000 cubic metres of water per second [1].",
+      "citation_pages": [
+        2
+      ],
+      "expected_page": 2
+    },
+    {
+      "id": "q07",
+      "type": "factual",
+      "question": "What is the height of Mount Everest?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "Mount Everest's peak stands at 8,848 metres [1].",
+      "citation_pages": [
+        2
+      ],
+      "expected_page": 2
+    },
+    {
+      "id": "q08",
+      "type": "factual",
+      "question": "Who first summited Mount Everest and when?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "Mount Everest was first summited by Edmund Hillary and Tenzing Norgay on May 29, 1953 [1], [2].",
+      "citation_pages": [
+        2,
+        2
+      ],
+      "expected_page": 2
+    },
+    {
+      "id": "q09",
+      "type": "factual",
+      "question": "What percentage of the world's fresh water does Lake Baikal hold?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "Lake Baikal holds approximately 20 percent of the world's unfrozen surface fresh water [1].",
+      "citation_pages": [
+        2
+      ],
+      "expected_page": 2
+    },
+    {
+      "id": "q10",
+      "type": "keyword",
+      "question": "Who invented the World Wide Web and where?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "The World Wide Web was invented by British scientist Tim Berners-Lee while working at CERN in Geneva, Switzerland [1].",
+      "citation_pages": [
+        3
+      ],
+      "expected_page": 3
+    },
+    {
+      "id": "q11",
+      "type": "factual",
+      "question": "What US patent number did Alexander Graham Bell receive for the telephone?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "Alexander Graham Bell received US Patent 174,465 for the telephone [1].",
+      "citation_pages": [
+        3
+      ],
+      "expected_page": 3
+    },
+    {
+      "id": "q12",
+      "type": "keyword",
+      "question": "What mold did Alexander Fleming observe in 1928?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "Alexander Fleming observed a mold called Penicillium notatum in 1928 [1].",
+      "citation_pages": [
+        3
+      ],
+      "expected_page": 3
+    },
+    {
+      "id": "q13",
+      "type": "factual",
+      "question": "What temperature limit did the Paris Agreement set for global warming?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "The Paris Agreement aims to limit global warming to well below 2 degrees Celsius above pre-industrial levels, with efforts to limit it to 1.5 degrees Celsius [1].",
+      "citation_pages": [
+        4
+      ],
+      "expected_page": 4
+    },
+    {
+      "id": "q14",
+      "type": "factual",
+      "question": "How long is the Great Barrier Reef?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "The Great Barrier Reef stretches over 2,300 kilometres [1], [5].",
+      "citation_pages": [
+        4,
+        4
+      ],
+      "expected_page": 4
+    },
+    {
+      "id": "q15",
+      "type": "keyword",
+      "question": "What international treaty was signed in 1987 to protect the ozone layer?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "The Montreal Protocol, signed in 1987, is the international treaty designed to protect the ozone layer [1].",
+      "citation_pages": [
+        4
+      ],
+      "expected_page": 4
+    },
+    {
+      "id": "q16",
+      "type": "factual",
+      "question": "Who described the double-helix structure of DNA and in what year?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "The double-helix structure of DNA was described by James Watson and Francis Crick in 1953 [1].",
+      "citation_pages": [
+        5
+      ],
+      "expected_page": 5
+    },
+    {
+      "id": "q17",
+      "type": "keyword",
+      "question": "Who won the Nobel Prize in Chemistry in 2020 for CRISPR-Cas9?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "Jennifer Doudna and Emmanuelle Charpentier won the Nobel Prize in Chemistry in 2020 for the discovery of CRISPR-Cas9 gene editing technology [1], [4].",
+      "citation_pages": [
+        5,
+        5
+      ],
+      "expected_page": 5
+    },
+    {
+      "id": "q18",
+      "type": "no_answer",
+      "question": "What is the GDP of Japan in 2024?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "I don't know based on the provided context.",
+      "citation_pages": [],
+      "expected_page": null
+    },
+    {
+      "id": "q19",
+      "type": "no_answer",
+      "question": "What are the ingredients in a traditional Italian carbonara?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "I don't know based on the provided context.",
+      "citation_pages": [],
+      "expected_page": null
+    },
+    {
+      "id": "q20",
+      "type": "no_answer",
+      "question": "Who won the FIFA World Cup in 2022?",
+      "retrieval_correct": true,
+      "answer_correct": true,
+      "pass": true,
+      "answer_snippet": "I don't know based on the provided context.",
+      "citation_pages": [],
+      "expected_page": null
+    }
+  ]
+}

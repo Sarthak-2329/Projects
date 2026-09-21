@@ -9,3 +9,4 @@ httpx
 pypdf2
 reportlab
 pytest-asyncio
+rank-bm25
